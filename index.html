@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yard Container Tracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg2: #f5f5f4;
+  --bg3: #eeede9;
+  --text: #1a1a1a;
+  --text2: #6b6b6b;
+  --text3: #9b9b9b;
+  --border: rgba(0,0,0,0.12);
+  --border2: rgba(0,0,0,0.22);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --info-bg: #E6F1FB;
+  --info-text: #0C447C;
+  --success-bg: #E1F5EE;
+  --success-text: #085041;
+  --warn-bg: #FAEEDA;
+  --warn-text: #633806;
+  --danger-bg: #FCEBEB;
+  --danger-text: #A32D2D;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1c;
+    --bg2: #252525;
+    --bg3: #2e2e2e;
+    --text: #f0f0f0;
+    --text2: #a0a0a0;
+    --text3: #666;
+    --border: rgba(255,255,255,0.1);
+    --border2: rgba(255,255,255,0.2);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
+.topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.app-title { font-size: 16px; font-weight: 500; }
+.today-label { font-size: 12px; color: var(--text2); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.stat { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; text-align: center; }
+.stat-num { font-size: 22px; font-weight: 500; margin-top: 3px; }
+.stat-label { font-size: 11px; color: var(--text2); }
+.tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 1.25rem; background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 0 0.5rem; overflow-x: auto; }
+.tab { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--text2); border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
+.tab.active { color: var(--text); border-bottom: 2px solid var(--text); font-weight: 500; }
+.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+.section-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+.field label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px 10px; font-size: 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); outline: none; }
+.field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
+.field textarea { height: 58px; resize: vertical; }
+.btn { padding: 7px 14px; font-size: 13px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); cursor: pointer; font-weight: 500; transition: background 0.1s; }
+.btn:hover { background: var(--bg2); }
+.btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+.btn-primary:hover { opacity: 0.85; }
+.btn-sm { padding: 3px 9px; font-size: 12px; }
+.btn-danger { border-color: #E24B4A; color: #A32D2D; }
+.btn-danger:hover { background: #FCEBEB; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 7px 8px; font-weight: 500; font-size: 11px; color: var(--text2); border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.tfoot-row td { font-weight: 500; background: var(--bg2); }
+.badge { display: inline-block; padding: 2px 7px; border-radius: var(--radius); font-size: 11px; font-weight: 500; }
+.badge-in { background: #E1F5EE; color: #085041; }
+.badge-out { background: #EAF3DE; color: #27500A; }
+.badge-cross { background: #EEEDFE; color: #3C3489; }
+.badge-warn { background: #FAEEDA; color: #633806; }
+.badge-inv { background: #E6F1FB; color: #0C447C; }
+.row-warn { background: rgba(250,238,218,0.3); }
+.row-inyard { background: rgba(225,245,238,0.15); }
+.highlight-error { background: rgba(252,235,235,0.35); }
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+.filter-bar input, .filter-bar select { padding: 6px 10px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+.empty { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
+.sep { height: 0.5px; background: var(--border); margin: 1rem 0; }
+.op-row { display: flex; gap: 8px; margin-bottom: 1rem; }
+.op-btn { flex: 1; padding: 9px 4px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; text-align: center; font-size: 12px; background: var(--bg); color: var(--text2); }
+.op-btn.sel-unload { border-color: #1D9E75; background: #E1F5EE; color: #085041; font-weight: 500; }
+.op-btn.sel-load { border-color: #639922; background: #EAF3DE; color: #27500A; font-weight: 500; }
+.op-btn.sel-cross { border-color: #7F77DD; background: #EEEDFE; color: #3C3489; font-weight: 500; }
+.info-box { padding: 8px 10px; border-radius: var(--radius); font-size: 12px; margin-top: 8px; background: var(--bg2); color: var(--text2); }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: 460px; max-width: 96vw; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 16px; font-weight: 500; margin-bottom: 1rem; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
+.client-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.client-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+.client-row:last-child { border-bottom: none; }
+.client-summary { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.overflow-x { overflow-x: auto; }
+@media (max-width: 600px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .grid2 { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr; }
+  .topbar { padding: 0 1rem; }
+  .container { padding: 1rem 0.5rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div>
+      <div class="app-title"><i class="ti ti-container" aria-hidden="true"></i> Yard Container Tracker</div>
+      <div class="today-label" id="today-label"></div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      <option value="">All clients</option>
+    </select>
+    <button class="btn" onclick="syncNow()">Sync</button><button class="btn btn-primary" onclick="openAddModal()"><i class="ti ti-plus" aria-hidden="true"></i> New Entry</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="stats-grid" id="stats"></div>
+
+  <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div class="tabs" id="tabs">
+      <button class="tab active" onclick="switchTab('yard',this)">In Yard</button>
+      <button class="tab" onclick="switchTab('all',this)">All Transactions</button>
+      <button class="tab" onclick="switchTab('invoiced',this)">Invoiced</button>
+      <button class="tab" onclick="switchTab('clients',this)">Clients</button>
+      <button class="tab" onclick="switchTab('rates',this)">Rate Sheet</button>
+    </div>
+    <div style="padding:1.25rem">
+      <div id="tab-yard"></div>
+      <div id="tab-all" style="display:none"></div>
+      <div id="tab-invoiced" style="display:none"></div>
+      <div id="tab-clients" style="display:none"></div>
+      <div id="tab-rates" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Entry Modal -->
+<div id="modal-add" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">New container entry</div>
+    <div class="op-row">
+      <button class="op-btn" id="btn-unload" onclick="setOp('unload')"><i class="ti ti-arrow-bar-to-down" aria-hidden="true"></i> Unloading</button>
+      <button class="op-btn" id="btn-load" onclick="setOp('load')"><i class="ti ti-arrow-bar-up" aria-hidden="true"></i> Loading</button>
+      <button class="op-btn" id="btn-cross" onclick="setOp('cross')"><i class="ti ti-arrows-exchange" aria-hidden="true"></i> Cross-loading</button>
+    </div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field">
+        <label>Container no.</label>
+        <input id="f-cnum" placeholder="e.g. MSCU1234567" style="text-transform:uppercase">
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input id="f-date" type="date">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="f-client"><option value="">— Select client —</option></select>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Vessel / Ref</label>
+      <input id="f-vessel" placeholder="Optional">
+    </div>
+    <div class="field">
+      <label>Remarks</label>
+      <textarea id="f-remarks" placeholder="Optional notes"></textarea>
+    </div>
+    <div id="match-info" style="display:none" class="info-box"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-add')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEntry()">Save entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- Client Modal -->
+<div id="modal-client" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title" id="client-modal-title">Add client</div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field">
+        <label>Client name</label>
+        <input id="cl-name" placeholder="Company or person name">
+      </div>
+      <div class="field">
+        <label>Short code</label>
+        <input id="cl-code" placeholder="e.g. ACME" maxlength="6" style="text-transform:uppercase">
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field">
+        <label>Contact person</label>
+        <input id="cl-contact" placeholder="Optional">
+      </div>
+      <div class="field">
+        <label>Phone / email</label>
+        <input id="cl-phone" placeholder="Optional">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Notes</label>
+      <textarea id="cl-notes" placeholder="Optional"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-client')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveClient()">Save client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Invoice Modal -->
+<div id="modal-invoice" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Mark as invoiced</div>
+    <div class="field">
+      <label>Invoice number</label>
+      <input id="inv-num" placeholder="e.g. INV-2024-001">
+    </div>
+    <div class="info-box" style="margin-top:8px" id="inv-desc"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-invoice')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInvoice()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+/*
+GOOGLE_APPS_SCRIPT_TEMPLATE
+
+Deploy a Web App and use this URL:
+https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec
+
+Expected JSON:
+GET -> {clients:[...], transactions:[...]}
+
+POST -> {
+  action:'saveAll',
+  clients:[...],
+  transactions:[...]
+}
+*/
+
+const RATES = [{days:3,rate:3},{days:2,rate:4},{days:2,rate:5},{days:Infinity,rate:10}];
+const OP_UNLOAD = 17, OP_CROSS = 20;
+const AV_BG = ['#E1F5EE','#EEEDFE','#E6F1FB','#FAEEDA','#FAECE7','#EAF3DE','#FBEAF0'];
+const AV_TX = ['#085041','#3C3489','#0C447C','#633806','#712B13','#27500A','#72243E'];
+
+let DB = [], CLIENTS = [];
+let currentOp = 'unload';
+let currentTab = 'yard';
+let globalClientFilter = '';
+let editingClientId = null;
+let pendingInvEntry = null;
+
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
+
+async function loadData() {
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL);
+    const data = await res.json();
+    DB = data.transactions || [];
+    CLIENTS = data.clients || [];
+  } catch(e) {
+    console.error('Load error', e);
+    DB = [];
+    CLIENTS = [];
+  }
+}
+
+async function saveData() {
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        action:'saveAll',
+        clients: CLIENTS,
+        transactions: DB
+      })
+    });
+  } catch(e) {
+    console.error('Save error', e);
+  }
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function today() { return new Date().toISOString().slice(0,10); }
+function fmt(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+}
+
+function clientById(id) { return CLIENTS.find(c => c.id === id) || null; }
+function clientName(id) { const c = clientById(id); return c ? c.name : '—'; }
+function avatarIdx(id) { const i = CLIENTS.findIndex(c => c.id === id); return i < 0 ? 0 : i % AV_BG.length; }
+function initials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
+
+function calcStorage(a, b) {
+  const da = new Date(a), db = b ? new Date(b) : new Date();
+  const days = Math.max(1, Math.ceil((db - da) / 864e5));
+  let cost = 0, rem = days;
+  for (const t of RATES) {
+    const u = Math.min(rem, t.days === Infinity ? rem : t.days);
+    cost += u * t.rate; rem -= u;
+    if (rem <= 0) break;
+  }
+  return { days, cost };
+}
+
+function calcTotal(e) {
+  if (e.op === 'load-unmatched') return { days: 0, storageCost: 0, opCost: 0, total: 0 };
+  const opCost = e.op === 'cross' ? OP_CROSS : OP_UNLOAD;
+  const { days, cost } = calcStorage(e.unloadDate, e.loadDate || null);
+  return { days, storageCost: cost, opCost, total: cost + opCost };
+}
+
+function populateClientDropdowns() {
+  const sel = document.getElementById('f-client');
+  const gf = document.getElementById('global-client-filter');
+  const prev = sel.value;
+  const sorted = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
+  sel.innerHTML = '<option value="">— Select client —</option>';
+  gf.innerHTML = '<option value="">All clients</option>';
+  sorted.forEach(c => {
+    sel.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
+    gf.innerHTML += `<option value="${c.id}"${globalClientFilter === c.id ? ' selected' : ''}>${c.name}</option>`;
+  });
+  if (prev) sel.value = prev;
+}
+
+function applyClientFilter() {
+  globalClientFilter = document.getElementById('global-client-filter').value;
+  render();
+}
+
+function openAddModal() {
+  document.getElementById('f-cnum').value = '';
+  document.getElementById('f-vessel').value = '';
+  document.getElementById('f-remarks').value = '';
+  document.getElementById('f-date').value = today();
+  document.getElementById('f-client').value = globalClientFilter || '';
+  document.getElementById('match-info').style.display = 'none';
+  setOp('unload');
+  document.getElementById('modal-add').classList.add('open');
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setOp(op) {
+  currentOp = op;
+  ['unload','load','cross'].forEach(o => {
+    document.getElementById('btn-' + o).className = 'op-btn' + (o === op ? ' sel-' + o : '');
+  });
+  checkMatch();
+}
+
+document.getElementById('f-cnum').addEventListener('input', function() {
+  this.value = this.value.toUpperCase();
+  if (currentOp === 'load') checkMatch();
+});
+
+function checkMatch() {
+  const box = document.getElementById('match-info');
+  if (currentOp !== 'load') { box.style.display = 'none'; return; }
+  const v = document.getElementById('f-cnum').value.trim();
+  box.style.display = 'block';
+  if (!v) {
+    box.style.background = ''; box.style.color = '';
+    box.textContent = 'Enter container number to find a matching unload entry.';
+    return;
+  }
+  const m = DB.find(e => e.containerNo === v && e.op === 'unload' && !e.loadDate && !e.deleted);
+  if (m) {
+    box.style.background = '#E1F5EE'; box.style.color = '#085041';
+    box.textContent = '✓ Match found — unloaded ' + fmt(m.unloadDate) + ', client: ' + clientName(m.clientId) + '. This loading will complete that transaction.';
+    document.getElementById('f-client').value = m.clientId;
+  } else {
+    box.style.background = '#FAEEDA'; box.style.color = '#633806';
+    box.textContent = '⚠ No open unload found for this container. Will be saved as an unmatched loading entry.';
+  }
+}
+
+async function saveEntry() {
+  const cnum = document.getElementById('f-cnum').value.toUpperCase().trim();
+  const date = document.getElementById('f-date').value;
+  const clientId = document.getElementById('f-client').value;
+  if (!cnum || !date || !clientId) { alert('Container number, date and client are required.'); return; }
+  const vessel = document.getElementById('f-vessel').value.trim();
+  const remarks = document.getElementById('f-remarks').value.trim();
+  if (currentOp === 'unload') {
+    DB.push({ id: uid(), containerNo: cnum, op: 'unload', unloadDate: date, loadDate: null, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false });
+  } else if (currentOp === 'load') {
+    const m = DB.find(e => e.containerNo === cnum && e.op === 'unload' && !e.loadDate && !e.deleted);
+    if (m) { m.loadDate = date; }
+    else { DB.push({ id: uid(), containerNo: cnum, op: 'load-unmatched', unloadDate: null, loadDate: date, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false }); }
+  } else {
+    DB.push({ id: uid(), containerNo: cnum, op: 'cross', unloadDate: date, loadDate: date, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false });
+  }
+  await saveData(); closeModal('modal-add'); render();
+}
+
+function openClientModal(id) {
+  editingClientId = id || null;
+  document.getElementById('client-modal-title').textContent = id ? 'Edit client' : 'Add client';
+  if (id) {
+    const c = clientById(id);
+    document.getElementById('cl-name').value = c.name || '';
+    document.getElementById('cl-code').value = c.code || '';
+    document.getElementById('cl-contact').value = c.contact || '';
+    document.getElementById('cl-phone').value = c.phone || '';
+    document.getElementById('cl-notes').value = c.notes || '';
+  } else {
+    ['cl-name','cl-code','cl-contact','cl-phone','cl-notes'].forEach(i => document.getElementById(i).value = '');
+  }
+  document.getElementById('modal-client').classList.add('open');
+}
+
+document.getElementById('cl-code').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
+
+async function saveClient() {
+  const name = document.getElementById('cl-name').value.trim();
+  if (!name) { alert('Client name is required.'); return; }
+  if (editingClientId) {
+    const c = clientById(editingClientId);
+    c.name = name; c.code = document.getElementById('cl-code').value.trim();
+    c.contact = document.getElementById('cl-contact').value.trim();
+    c.phone = document.getElementById('cl-phone').value.trim();
+    c.notes = document.getElementById('cl-notes').value.trim();
+  } else {
+    CLIENTS.push({ id: uid(), name, code: document.getElementById('cl-code').value.trim(), contact: document.getElementById('cl-contact').value.trim(), phone: document.getElementById('cl-phone').value.trim(), notes: document.getElementById('cl-notes').value.trim(), deleted: false, createdAt: today() });
+  }
+  await saveData(); closeModal('modal-client'); populateClientDropdowns(); render();
+}
+
+async function deleteClient(id) {
+  const c = clientById(id);
+  const hasTx = DB.filter(e => !e.deleted && e.clientId === id).length;
+  const msg = hasTx ? `${c.name} has ${hasTx} transaction(s). Delete client anyway?` : `Delete client ${c.name}?`;
+  if (!confirm(msg)) return;
+  c.deleted = true; await saveData(); populateClientDropdowns(); render();
+}
+
+function openInvModal(id) {
+  pendingInvEntry = DB.find(e => e.id === id);
+  if (!pendingInvEntry) return;
+  document.getElementById('inv-num').value = pendingInvEntry.invoiceNo || '';
+  const { total } = calcTotal(pendingInvEntry);
+  document.getElementById('inv-desc').textContent = `Container: ${pendingInvEntry.containerNo} | Client: ${clientName(pendingInvEntry.clientId)} | Total: RO ${total.toFixed(2)}`;
+  document.getElementById('modal-invoice').classList.add('open');
+}
+
+async function saveInvoice() {
+  const n = document.getElementById('inv-num').value.trim();
+  if (!n) { alert('Enter invoice number.'); return; }
+  if (pendingInvEntry) { pendingInvEntry.invoiceNo = n; pendingInvEntry.invoiced = true; await saveData(); render(); }
+  closeModal('modal-invoice'); pendingInvEntry = null;
+}
+
+async function unmarkInvoice(id) {
+  const e = DB.find(x => x.id === id);
+  if (e && confirm('Remove invoice mark from ' + e.containerNo + '?')) {
+    e.invoiced = false; e.invoiceNo = null; await saveData(); render();
+  }
+}
+
+async function deleteEntry(id) {
+  const e = DB.find(x => x.id === id);
+  if (e && confirm('Delete entry for ' + e.containerNo + '?')) {
+    e.deleted = true; await saveData(); render();
+  }
+}
+
+function filterByClient(data) {
+  return globalClientFilter ? data.filter(e => e.clientId === globalClientFilter) : data;
+}
+
+function entryRow(e) {
+  const isUnmatched = e.op === 'load-unmatched';
+  const inYard = e.op === 'unload' && !e.loadDate;
+  const isCross = e.op === 'cross';
+  const r = calcTotal(e);
+  const storageCost = isUnmatched ? '—' : 'RO ' + r.storageCost.toFixed(2);
+  const opCost = isUnmatched ? '—' : 'RO ' + r.opCost.toFixed(2);
+  const total = isUnmatched ? '—' : 'RO ' + r.total.toFixed(2);
+  const days = isUnmatched ? '—' : r.days;
+  const opBadge = isUnmatched ? '<span class="badge badge-warn">⚠ load (no unload)</span>' :
+    isCross ? '<span class="badge badge-cross">Cross-load</span>' :
+    inYard ? '<span class="badge badge-in">In yard</span>' :
+    '<span class="badge badge-out">Departed</span>';
+  const rowClass = isUnmatched ? 'highlight-error' : inYard ? 'row-inyard' : '';
+  const ci = clientById(e.clientId);
+  const ai = avatarIdx(e.clientId);
+  const clientCell = ci ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="client-avatar" style="width:22px;height:22px;background:${AV_BG[ai]};color:${AV_TX[ai]};font-size:10px">${initials(ci.name)}</span>${ci.name}</span>` : '<span style="color:var(--text2)">—</span>';
+  const invCell = e.invoiced ?
+    `<span class="badge badge-inv">${e.invoiceNo}</span> <button class="btn btn-sm" onclick="unmarkInvoice('${e.id}')" title="Remove">✕</button>` :
+    (e.loadDate || isCross ? `<button class="btn btn-sm" onclick="openInvModal('${e.id}')">Mark invoiced</button>` : '<span style="color:var(--text2);font-size:11px">In yard</span>');
+  return `<tr class="${rowClass}">
+    <td><strong>${e.containerNo}</strong>${e.vessel ? '<br><span style="font-size:11px;color:var(--text2)">'+e.vessel+'</span>' : ''}</td>
+    <td>${clientCell}</td>
+    <td>${opBadge}</td>
+    <td>${fmt(e.unloadDate)}</td>
+    <td>${fmt(e.loadDate)}</td>
+    <td style="text-align:center">${days}</td>
+    <td>${storageCost}</td>
+    <td>${opCost}</td>
+    <td><strong>${total}</strong></td>
+    <td>${invCell}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">×</button></td>
+  </tr>`;
+}
+
+function tableWrap(rows, tfoot) {
+  return `<div class="overflow-x"><table>
+    <thead><tr>
+      <th>Container no.</th><th>Client</th><th>Status</th><th>Unloaded</th><th>Loaded</th>
+      <th style="text-align:center">Days</th><th>Storage</th><th>Op. charge</th><th>Total</th><th>Invoice</th><th></th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="11" class="empty">No records found.</td></tr>'}</tbody>
+    ${tfoot || ''}
+  </table></div>`;
+}
+
+function renderStats() {
+  let data = DB.filter(e => !e.deleted);
+  if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
+  const inYard = data.filter(e => e.op === 'unload' && !e.loadDate).length;
+  const todayArr = data.filter(e => e.unloadDate === today()).length;
+  const pendingInv = data.filter(e => !e.invoiced && (e.loadDate || e.op === 'cross')).length;
+  const warns = data.filter(e => e.op === 'load-unmatched').length;
+  const label = globalClientFilter ? clientName(globalClientFilter) : 'All clients';
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-label">${label}</div><div class="stat-num" style="color:#1D9E75">${inYard} in yard</div></div>
+    <div class="stat"><div class="stat-label">Arrivals today</div><div class="stat-num">${todayArr}</div></div>
+    <div class="stat"><div class="stat-label">Pending invoice</div><div class="stat-num" style="color:#BA7517">${pendingInv}</div></div>
+    <div class="stat"><div class="stat-label">Unmatched loads</div><div class="stat-num" style="color:#E24B4A">${warns}</div></div>`;
+}
+
+function renderYard() {
+  let data = filterByClient(DB.filter(e => !e.deleted));
+  const inYard = data.filter(e => e.op === 'unload' && !e.loadDate);
+  const unmatched = data.filter(e => e.op === 'load-unmatched');
+  let rows = inYard.map(e => entryRow(e)).join('');
+  if (unmatched.length) {
+    rows += `<tr><td colspan="11" style="padding:5px 8px;font-size:11px;color:var(--text2);background:var(--bg2)"><i class="ti ti-alert-triangle" aria-hidden="true" style="color:#E24B4A"></i> Unmatched loading entries — no corresponding unload found</td></tr>`;
+    rows += unmatched.map(e => entryRow(e)).join('');
+  }
+  const totalS = inYard.reduce((s,e) => s + calcTotal(e).storageCost, 0);
+  const totalO = inYard.reduce((s,e) => s + calcTotal(e).opCost, 0);
+  const tfoot = inYard.length ? `<tfoot><tr class="tfoot-row"><td colspan="6" style="padding:7px 8px;font-size:11px">Accrued storage as of today</td><td>RO ${totalS.toFixed(2)}</td><td>RO ${totalO.toFixed(2)}</td><td>RO ${(totalS+totalO).toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+  document.getElementById('tab-yard').innerHTML = tableWrap(rows, tfoot);
+  if (!inYard.length && !unmatched.length) document.getElementById('tab-yard').innerHTML = '<div class="empty">No containers currently in yard.</div>';
+}
+
+function renderAll() {
+  const clientOpts = CLIENTS.filter(c => !c.deleted).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('tab-all').innerHTML = `<div class="filter-bar">
+    <input id="f-search" placeholder="Container / client" oninput="renderAllTable()" style="width:160px">
+    <select id="f-status" onchange="renderAllTable()"><option value="">All statuses</option><option value="inyard">In yard</option><option value="departed">Departed</option><option value="cross">Cross-load</option><option value="warn">Unmatched</option></select>
+    <select id="f-inv2" onchange="renderAllTable()"><option value="">All</option><option value="0">Not invoiced</option><option value="1">Invoiced</option></select>
+    <select id="f-cl2" onchange="renderAllTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="all-table"></div>`;
+  renderAllTable();
+}
+
+function renderAllTable() {
+  let data = DB.filter(e => !e.deleted);
+  if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
+  const search = (document.getElementById('f-search')?.value || '').toLowerCase();
+  const status = document.getElementById('f-status')?.value || '';
+  const inv = document.getElementById('f-inv2')?.value || '';
+  const cl = document.getElementById('f-cl2')?.value || '';
+  if (search) data = data.filter(e => e.containerNo.toLowerCase().includes(search) || (clientName(e.clientId)||'').toLowerCase().includes(search));
+  if (status === 'inyard') data = data.filter(e => e.op === 'unload' && !e.loadDate);
+  else if (status === 'departed') data = data.filter(e => e.op === 'unload' && e.loadDate);
+  else if (status === 'cross') data = data.filter(e => e.op === 'cross');
+  else if (status === 'warn') data = data.filter(e => e.op === 'load-unmatched');
+  if (inv === '0') data = data.filter(e => !e.invoiced);
+  if (inv === '1') data = data.filter(e => e.invoiced);
+  if (cl) data = data.filter(e => e.clientId === cl);
+  data.sort((a,b) => (b.unloadDate||b.loadDate||'').localeCompare(a.unloadDate||a.loadDate||''));
+  document.getElementById('all-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''));
+}
+
+function renderInvoiced() {
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced)).sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+  const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
+  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="8" style="padding:7px 8px;font-size:11px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+  document.getElementById('tab-invoiced').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''), tfoot);
+}
+
+function renderClients() {
+  const active = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <div class="section-title" style="margin:0">Clients (${active.length})</div>
+    <button class="btn btn-primary btn-sm" onclick="openClientModal(null)"><i class="ti ti-plus" aria-hidden="true"></i> Add client</button>
+  </div>`;
+  if (!active.length) {
+    html += '<div class="empty">No clients yet. Add your first client above.</div>';
+  } else {
+    active.forEach((c, i) => {
+      const ai = i % AV_BG.length;
+      const txAll = DB.filter(e => !e.deleted && e.clientId === c.id);
+      const inYard = txAll.filter(e => e.op === 'unload' && !e.loadDate).length;
+      const totalBilled = txAll.filter(e => e.invoiced).reduce((s,e) => s + calcTotal(e).total, 0);
+      const pendingAmt = txAll.filter(e => !e.invoiced && (e.loadDate || e.op==='cross')).reduce((s,e) => s + calcTotal(e).total, 0);
+      html += `<div class="client-row">
+        <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;font-size:14px">${c.name}${c.code ? ` <span style="font-size:11px;color:var(--text2)">(${c.code})</span>` : ''}</div>
+          <div class="client-summary">
+            ${c.contact ? c.contact + ' · ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' · ' : ''}
+            <span style="color:#1D9E75">${inYard} in yard</span> ·
+            ${txAll.length} total tx ·
+            RO ${totalBilled.toFixed(2)} billed ·
+            <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending</span>
+          </div>
+          ${c.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${c.notes}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm" onclick="viewClient('${c.id}')"><i class="ti ti-eye" aria-hidden="true"></i> View</button>
+          <button class="btn btn-sm" onclick="openClientModal('${c.id}')"><i class="ti ti-edit" aria-hidden="true"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')"><i class="ti ti-trash" aria-hidden="true"></i></button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('tab-clients').innerHTML = html;
+}
+
+function viewClient(id) {
+  globalClientFilter = id;
+  document.getElementById('global-client-filter').value = id;
+  switchTab('yard', document.querySelectorAll('.tab')[0]);
+}
+
+function renderRates() {
+  document.getElementById('tab-rates').innerHTML = `
+    <div class="section-title">Storage rate tiers</div>
+    <table style="max-width:360px;margin-bottom:1.25rem">
+      <thead><tr><th>Period</th><th>Rate per day</th></tr></thead>
+      <tbody>
+        <tr><td>Day 1 – 3</td><td>RO 3.00</td></tr>
+        <tr><td>Day 4 – 5</td><td>RO 4.00</td></tr>
+        <tr><td>Day 6 – 7</td><td>RO 5.00</td></tr>
+        <tr><td>Day 8 onwards</td><td>RO 10.00</td></tr>
+      </tbody>
+    </table>
+    <div class="sep"></div>
+    <div class="section-title">Operation charges</div>
+    <table style="max-width:360px">
+      <thead><tr><th>Operation</th><th>Charge</th></tr></thead>
+      <tbody>
+        <tr><td>Unloading + loading</td><td>RO 17.00 per operation</td></tr>
+        <tr><td>Cross-loading</td><td>RO 20.00 per operation</td></tr>
+      </tbody>
+    </table>
+    <div class="sep"></div>
+    <div style="font-size:12px;color:var(--text2)">Storage accrues per calendar day from unload to load date (minimum 1 day). Containers still in yard accrue to today's date.</div>`;
+}
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['yard','all','invoiced','clients','rates'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  render();
+}
+
+
+async function syncNow() {
+  await loadData();
+  populateClientDropdowns();
+  render();
+  alert('Data synchronized');
+}
+
+function render() {
+  renderStats();
+  if (currentTab === 'yard') renderYard();
+  else if (currentTab === 'all') renderAll();
+  else if (currentTab === 'invoiced') renderInvoiced();
+  else if (currentTab === 'clients') renderClients();
+  else if (currentTab === 'rates') renderRates();
+}
+
+document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
+(async function(){
+  await loadData();
+  populateClientDropdowns();
+  render();
+})();
+</script>
+</body>
+</html>
