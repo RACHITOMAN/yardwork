@@ -170,7 +170,7 @@ tr:last-child td { border-bottom: none; }
     </div>
     <div class="field" style="margin-bottom:10px">
       <label>Client</label>
-      <select id="f-client"><option value="">â€” Select client â€”</option></select>
+      <select id="f-client"><option value="">— Select client —</option></select>
     </div>
     <div class="field" style="margin-bottom:10px">
       <label>Vessel / Ref</label>
@@ -287,14 +287,14 @@ async function loadData() {
 async function saveData() {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method: 'POST',
+      mode: 'no-cors',
       body: JSON.stringify({
-        action:'saveAll',
+        action: 'saveAll',
         clients: CLIENTS,
         transactions: DB
       })
-    });
+});
   } catch(e) {
     console.error('Save error', e);
   }
@@ -302,12 +302,12 @@ async function saveData() {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function today() { return new Date().toISOString().slice(0,10); }
 function fmt(d) {
-  if (!d) return 'â€”';
+  if (!d) return '—';
   return new Date(d).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
 }
 
 function clientById(id) { return CLIENTS.find(c => c.id === id) || null; }
-function clientName(id) { const c = clientById(id); return c ? c.name : 'â€”'; }
+function clientName(id) { const c = clientById(id); return c ? c.name : '—'; }
 function avatarIdx(id) { const i = CLIENTS.findIndex(c => c.id === id); return i < 0 ? 0 : i % AV_BG.length; }
 function initials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
 
@@ -335,7 +335,7 @@ function populateClientDropdowns() {
   const gf = document.getElementById('global-client-filter');
   const prev = sel.value;
   const sorted = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
-  sel.innerHTML = '<option value="">â€” Select client â€”</option>';
+  sel.innerHTML = '<option value="">— Select client —</option>';
   gf.innerHTML = '<option value="">All clients</option>';
   sorted.forEach(c => {
     sel.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
@@ -388,11 +388,11 @@ function checkMatch() {
   const m = DB.find(e => e.containerNo === v && e.op === 'unload' && !e.loadDate && !e.deleted);
   if (m) {
     box.style.background = '#E1F5EE'; box.style.color = '#085041';
-    box.textContent = 'âœ“ Match found â€” unloaded ' + fmt(m.unloadDate) + ', client: ' + clientName(m.clientId) + '. This loading will complete that transaction.';
+    box.textContent = '? Match found — unloaded ' + fmt(m.unloadDate) + ', client: ' + clientName(m.clientId) + '. This loading will complete that transaction.';
     document.getElementById('f-client').value = m.clientId;
   } else {
     box.style.background = '#FAEEDA'; box.style.color = '#633806';
-    box.textContent = 'âš  No open unload found for this container. Will be saved as an unmatched loading entry.';
+    box.textContent = '? No open unload found for this container. Will be saved as an unmatched loading entry.';
   }
 }
 
@@ -495,20 +495,20 @@ function entryRow(e) {
   const inYard = e.op === 'unload' && !e.loadDate;
   const isCross = e.op === 'cross';
   const r = calcTotal(e);
-  const storageCost = isUnmatched ? 'â€”' : 'RO ' + r.storageCost.toFixed(2);
-  const opCost = isUnmatched ? 'â€”' : 'RO ' + r.opCost.toFixed(2);
-  const total = isUnmatched ? 'â€”' : 'RO ' + r.total.toFixed(2);
-  const days = isUnmatched ? 'â€”' : r.days;
-  const opBadge = isUnmatched ? '<span class="badge badge-warn">âš  load (no unload)</span>' :
+  const storageCost = isUnmatched ? '—' : 'RO ' + r.storageCost.toFixed(2);
+  const opCost = isUnmatched ? '—' : 'RO ' + r.opCost.toFixed(2);
+  const total = isUnmatched ? '—' : 'RO ' + r.total.toFixed(2);
+  const days = isUnmatched ? '—' : r.days;
+  const opBadge = isUnmatched ? '<span class="badge badge-warn">? load (no unload)</span>' :
     isCross ? '<span class="badge badge-cross">Cross-load</span>' :
     inYard ? '<span class="badge badge-in">In yard</span>' :
     '<span class="badge badge-out">Departed</span>';
   const rowClass = isUnmatched ? 'highlight-error' : inYard ? 'row-inyard' : '';
   const ci = clientById(e.clientId);
   const ai = avatarIdx(e.clientId);
-  const clientCell = ci ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="client-avatar" style="width:22px;height:22px;background:${AV_BG[ai]};color:${AV_TX[ai]};font-size:10px">${initials(ci.name)}</span>${ci.name}</span>` : '<span style="color:var(--text2)">â€”</span>';
+  const clientCell = ci ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="client-avatar" style="width:22px;height:22px;background:${AV_BG[ai]};color:${AV_TX[ai]};font-size:10px">${initials(ci.name)}</span>${ci.name}</span>` : '<span style="color:var(--text2)">—</span>';
   const invCell = e.invoiced ?
-    `<span class="badge badge-inv">${e.invoiceNo}</span> <button class="btn btn-sm" onclick="unmarkInvoice('${e.id}')" title="Remove">âœ•</button>` :
+    `<span class="badge badge-inv">${e.invoiceNo}</span> <button class="btn btn-sm" onclick="unmarkInvoice('${e.id}')" title="Remove">?</button>` :
     (e.loadDate || isCross ? `<button class="btn btn-sm" onclick="openInvModal('${e.id}')">Mark invoiced</button>` : '<span style="color:var(--text2);font-size:11px">In yard</span>');
   return `<tr class="${rowClass}">
     <td><strong>${e.containerNo}</strong>${e.vessel ? '<br><span style="font-size:11px;color:var(--text2)">'+e.vessel+'</span>' : ''}</td>
@@ -521,7 +521,7 @@ function entryRow(e) {
     <td>${opCost}</td>
     <td><strong>${total}</strong></td>
     <td>${invCell}</td>
-    <td><button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">Ã—</button></td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">×</button></td>
   </tr>`;
 }
 
@@ -557,7 +557,7 @@ function renderYard() {
   const unmatched = data.filter(e => e.op === 'load-unmatched');
   let rows = inYard.map(e => entryRow(e)).join('');
   if (unmatched.length) {
-    rows += `<tr><td colspan="11" style="padding:5px 8px;font-size:11px;color:var(--text2);background:var(--bg2)"><i class="ti ti-alert-triangle" aria-hidden="true" style="color:#E24B4A"></i> Unmatched loading entries â€” no corresponding unload found</td></tr>`;
+    rows += `<tr><td colspan="11" style="padding:5px 8px;font-size:11px;color:var(--text2);background:var(--bg2)"><i class="ti ti-alert-triangle" aria-hidden="true" style="color:#E24B4A"></i> Unmatched loading entries — no corresponding unload found</td></tr>`;
     rows += unmatched.map(e => entryRow(e)).join('');
   }
   const totalS = inYard.reduce((s,e) => s + calcTotal(e).storageCost, 0);
@@ -624,10 +624,10 @@ function renderClients() {
         <div style="flex:1;min-width:0">
           <div style="font-weight:500;font-size:14px">${c.name}${c.code ? ` <span style="font-size:11px;color:var(--text2)">(${c.code})</span>` : ''}</div>
           <div class="client-summary">
-            ${c.contact ? c.contact + ' Â· ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' Â· ' : ''}
-            <span style="color:#1D9E75">${inYard} in yard</span> Â·
-            ${txAll.length} total tx Â·
-            RO ${totalBilled.toFixed(2)} billed Â·
+            ${c.contact ? c.contact + ' · ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' · ' : ''}
+            <span style="color:#1D9E75">${inYard} in yard</span> ·
+            ${txAll.length} total tx ·
+            RO ${totalBilled.toFixed(2)} billed ·
             <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending</span>
           </div>
           ${c.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${c.notes}</div>` : ''}
@@ -655,9 +655,9 @@ function renderRates() {
     <table style="max-width:360px;margin-bottom:1.25rem">
       <thead><tr><th>Period</th><th>Rate per day</th></tr></thead>
       <tbody>
-        <tr><td>Day 1 â€“ 3</td><td>RO 3.00</td></tr>
-        <tr><td>Day 4 â€“ 5</td><td>RO 4.00</td></tr>
-        <tr><td>Day 6 â€“ 7</td><td>RO 5.00</td></tr>
+        <tr><td>Day 1 – 3</td><td>RO 3.00</td></tr>
+        <tr><td>Day 4 – 5</td><td>RO 4.00</td></tr>
+        <tr><td>Day 6 – 7</td><td>RO 5.00</td></tr>
         <tr><td>Day 8 onwards</td><td>RO 10.00</td></tr>
       </tbody>
     </table>
