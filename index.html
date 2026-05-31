@@ -155,7 +155,6 @@ tr:last-child td { border-bottom: none; }
     <div class="modal-title">New container entry</div>
     <div class="op-row">
       <button class="op-btn" id="btn-unload" onclick="setOp('unload')"><i class="ti ti-arrow-bar-to-down" aria-hidden="true"></i> Unloading</button>
-      <button class="op-btn" id="btn-load" onclick="setOp('load')"><i class="ti ti-arrow-bar-up" aria-hidden="true"></i> Loading</button>
       <button class="op-btn" id="btn-cross" onclick="setOp('cross')"><i class="ti ti-arrows-exchange" aria-hidden="true"></i> Cross-loading</button>
     </div>
     <div class="grid2" style="margin-bottom:10px">
@@ -173,53 +172,51 @@ tr:last-child td { border-bottom: none; }
       <select id="f-client"><option value="">� Select client �</option></select>
     </div>
     <div class="field" style="margin-bottom:10px">
-      <label>Vessel / Ref</label>
-      <input id="f-vessel" placeholder="Optional">
+     <label>Sales Ref</label>
+<input id="f-salesref" placeholder="Sales person">
     </div>
     <div class="field">
       <label>Remarks</label>
       <textarea id="f-remarks" placeholder="Optional notes"></textarea>
     </div>
-    <div id="match-info" style="display:none" class="info-box"></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-add')">Cancel</button>
       <button class="btn btn-primary" onclick="saveEntry()">Save entry</button>
     </div>
   </div>
 </div>
-
 <!-- Client Modal -->
+
 <div id="modal-client" class="modal-overlay">
   <div class="modal">
-    <div class="modal-title" id="client-modal-title">Add client</div>
-    <div class="grid2" style="margin-bottom:10px">
-      <div class="field">
-        <label>Client name</label>
-        <input id="cl-name" placeholder="Company or person name">
-      </div>
-      <div class="field">
-        <label>Short code</label>
-        <input id="cl-code" placeholder="e.g. ACME" maxlength="6" style="text-transform:uppercase">
-      </div>
-    </div>
-    <div class="grid2" style="margin-bottom:10px">
-      <div class="field">
-        <label>Contact person</label>
-        <input id="cl-contact" placeholder="Optional">
-      </div>
-      <div class="field">
-        <label>Phone / email</label>
-        <input id="cl-phone" placeholder="Optional">
-      </div>
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Notes</label>
-      <textarea id="cl-notes" placeholder="Optional"></textarea>
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeModal('modal-client')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveClient()">Save client</button>
-    </div>
+
+```
+<div class="modal-title" id="client-modal-title">
+  Add Client
+</div>
+
+<div class="field" style="margin-bottom:10px">
+  <label>Client Name</label>
+  <input
+    id="cl-name"
+    placeholder="Company or person name">
+</div>
+
+<div class="modal-btns">
+  <button
+    class="btn"
+    onclick="closeModal('modal-client')">
+    Cancel
+  </button>
+
+  <button
+    class="btn btn-primary"
+    onclick="saveClient()">
+    Save Client
+  </button>
+</div>
+```
+
   </div>
 </div>
 
@@ -324,10 +321,34 @@ function calcStorage(a, b) {
 }
 
 function calcTotal(e) {
-  if (e.op === 'load-unmatched') return { days: 0, storageCost: 0, opCost: 0, total: 0 };
-  const opCost = e.op === 'cross' ? OP_CROSS : OP_UNLOAD;
-  const { days, cost } = calcStorage(e.unloadDate, e.loadDate || null);
-  return { days, storageCost: cost, opCost, total: cost + opCost };
+
+  if (e.op === 'cross') {
+    return {
+      days: 0,
+      storageCost: 0,
+      opCost: OP_CROSS,
+      total: OP_CROSS
+    };
+  }
+
+  const { days, cost } =
+    calcStorage(
+      e.unloadDate,
+      e.loadDate || null
+    );
+
+  let opCost = OP_UNLOAD;
+
+  if (e.loaded) {
+    opCost += OP_UNLOAD;
+  }
+
+  return {
+    days,
+    storageCost: cost,
+    opCost,
+    total: cost + opCost
+  };
 }
 
 function populateClientDropdowns() {
@@ -351,11 +372,10 @@ function applyClientFilter() {
 
 function openAddModal() {
   document.getElementById('f-cnum').value = '';
-  document.getElementById('f-vessel').value = '';
-  document.getElementById('f-remarks').value = '';
+document.getElementById('f-salesref').value = '';
+document.getElementById('f-remarks').value = '';
   document.getElementById('f-date').value = today();
   document.getElementById('f-client').value = globalClientFilter || '';
-  document.getElementById('match-info').style.display = 'none';
   setOp('unload');
   document.getElementById('modal-add').classList.add('open');
 }
@@ -364,88 +384,185 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 
 function setOp(op) {
   currentOp = op;
-  ['unload','load','cross'].forEach(o => {
-    document.getElementById('btn-' + o).className = 'op-btn' + (o === op ? ' sel-' + o : '');
+
+  ['unload','cross'].forEach(o => {
+    document.getElementById('btn-' + o).className =
+      'op-btn' + (o === op ? ' sel-' + o : '');
   });
-  checkMatch();
 }
 
 document.getElementById('f-cnum').addEventListener('input', function() {
   this.value = this.value.toUpperCase();
-  if (currentOp === 'load') checkMatch();
 });
 
-function checkMatch() {
-  const box = document.getElementById('match-info');
-  if (currentOp !== 'load') { box.style.display = 'none'; return; }
-  const v = document.getElementById('f-cnum').value.trim();
-  box.style.display = 'block';
-  if (!v) {
-    box.style.background = ''; box.style.color = '';
-    box.textContent = 'Enter container number to find a matching unload entry.';
-    return;
-  }
-  const m = DB.find(e => e.containerNo === v && e.op === 'unload' && !e.loadDate && !e.deleted);
-  if (m) {
-    box.style.background = '#E1F5EE'; box.style.color = '#085041';
-    box.textContent = '? Match found � unloaded ' + fmt(m.unloadDate) + ', client: ' + clientName(m.clientId) + '. This loading will complete that transaction.';
-    document.getElementById('f-client').value = m.clientId;
-  } else {
-    box.style.background = '#FAEEDA'; box.style.color = '#633806';
-    box.textContent = '? No open unload found for this container. Will be saved as an unmatched loading entry.';
-  }
-}
-
 async function saveEntry() {
-  const cnum = document.getElementById('f-cnum').value.toUpperCase().trim();
-  const date = document.getElementById('f-date').value;
-  const clientId = document.getElementById('f-client').value;
-  if (!cnum || !date || !clientId) { alert('Container number, date and client are required.'); return; }
-  const vessel = document.getElementById('f-vessel').value.trim();
-  const remarks = document.getElementById('f-remarks').value.trim();
-  if (currentOp === 'unload') {
-    DB.push({ id: uid(), containerNo: cnum, op: 'unload', unloadDate: date, loadDate: null, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false });
-  } else if (currentOp === 'load') {
-    const m = DB.find(e => e.containerNo === cnum && e.op === 'unload' && !e.loadDate && !e.deleted);
-    if (m) { m.loadDate = date; }
-    else { DB.push({ id: uid(), containerNo: cnum, op: 'load-unmatched', unloadDate: null, loadDate: date, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false }); }
-  } else {
-    DB.push({ id: uid(), containerNo: cnum, op: 'cross', unloadDate: date, loadDate: date, clientId, vessel, remarks, invoiceNo: null, invoiced: false, deleted: false });
-  }
-  await saveData(); closeModal('modal-add'); render();
+
+const cnum = document
+.getElementById('f-cnum')
+.value
+.toUpperCase()
+.trim();
+
+const date = document
+.getElementById('f-date')
+.value;
+
+const clientId = document
+.getElementById('f-client')
+.value;
+
+const salesRef = document
+.getElementById('f-salesref')
+.value
+.trim();
+
+const remarks = document
+.getElementById('f-remarks')
+.value
+.trim();
+
+if (!cnum || !date || !clientId) {
+alert('Container number, date and client are required.');
+return;
 }
 
+if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum)) {
+alert('Container number must be 4 letters followed by 7 digits.');
+return;
+}
+
+if (currentOp === 'unload') {
+
+const duplicate = DB.find(
+  e =>
+    !e.deleted &&
+    e.op === 'unload' &&
+    !e.loaded &&
+    e.containerNo === cnum
+);
+
+if (duplicate) {
+  alert('This container is already in the yard.');
+  return;
+}
+
+DB.push({
+  id: uid(),
+  containerNo: cnum,
+  op: 'unload',
+  unloadDate: date,
+  loaded: false,
+  loadDate: '',
+  clientId: clientId,
+  salesRef: salesRef,
+  remarks: remarks,
+  invoiceNo: '',
+  invoiced: false,
+  deleted: false,
+  createdAt: new Date().toISOString()
+});
+
+
+} else {
+
+DB.push({
+  id: uid(),
+  containerNo: cnum,
+  op: 'cross',
+  unloadDate: date,
+  loaded: true,
+  loadDate: date,
+  clientId: clientId,
+  salesRef: salesRef,
+  remarks: remarks,
+  invoiceNo: '',
+  invoiced: false,
+  deleted: false,
+  createdAt: new Date().toISOString()
+});
+
+}
+
+await saveData();
+
+closeModal('modal-add');
+
+render();
+}
 function openClientModal(id) {
-  editingClientId = id || null;
-  document.getElementById('client-modal-title').textContent = id ? 'Edit client' : 'Add client';
-  if (id) {
-    const c = clientById(id);
-    document.getElementById('cl-name').value = c.name || '';
-    document.getElementById('cl-code').value = c.code || '';
-    document.getElementById('cl-contact').value = c.contact || '';
-    document.getElementById('cl-phone').value = c.phone || '';
-    document.getElementById('cl-notes').value = c.notes || '';
-  } else {
-    ['cl-name','cl-code','cl-contact','cl-phone','cl-notes'].forEach(i => document.getElementById(i).value = '');
-  }
-  document.getElementById('modal-client').classList.add('open');
+
+editingClientId = id || null;
+
+const titleEl =
+  document.getElementById('client-modal-title');
+
+if (titleEl) {
+  titleEl.textContent =
+    id
+      ? 'Edit Client'
+      : 'Add Client';
+}
+if (id) {
+
+const c =
+  clientById(id);
+
+document.getElementById(
+  'cl-name'
+).value =
+  c.name || '';
+
+} else {
+
+document.getElementById(
+  'cl-name'
+).value = '';
+
 }
 
-document.getElementById('cl-code').addEventListener('input', function() { this.value = this.value.toUpperCase(); });
-
+document
+.getElementById('modal-client')
+.classList
+.add('open');
+}
 async function saveClient() {
-  const name = document.getElementById('cl-name').value.trim();
-  if (!name) { alert('Client name is required.'); return; }
-  if (editingClientId) {
-    const c = clientById(editingClientId);
-    c.name = name; c.code = document.getElementById('cl-code').value.trim();
-    c.contact = document.getElementById('cl-contact').value.trim();
-    c.phone = document.getElementById('cl-phone').value.trim();
-    c.notes = document.getElementById('cl-notes').value.trim();
-  } else {
-    CLIENTS.push({ id: uid(), name, code: document.getElementById('cl-code').value.trim(), contact: document.getElementById('cl-contact').value.trim(), phone: document.getElementById('cl-phone').value.trim(), notes: document.getElementById('cl-notes').value.trim(), deleted: false, createdAt: today() });
-  }
-  await saveData(); closeModal('modal-client'); populateClientDropdowns(); render();
+
+const name =
+document
+.getElementById('cl-name')
+.value
+.trim();
+
+if (!name) {
+alert('Client name is required.');
+return;
+}
+
+if (editingClientId) {
+
+const c =
+  clientById(editingClientId);
+
+c.name = name;
+
+} else {
+
+CLIENTS.push({
+  id: uid(),
+  name: name,
+  deleted: false,
+  createdAt: today()
+});
+
+}
+
+await saveData();
+
+closeModal('modal-client');
+
+populateClientDropdowns();
+
+render();
 }
 
 async function deleteClient(id) {
@@ -505,34 +622,70 @@ async function deleteEntry(id) {
     e.deleted = true; await saveData(); render();
   }
 }
+async function markLoaded(id) {
 
+const e =
+DB.find(x => x.id === id);
+
+if (!e) return;
+const loadDate =
+    prompt(
+      'Enter load date (YYYY-MM-DD)',
+      new Date().toISOString().slice(0,10)
+    );
+  if (!loadDate) return;
+e.loaded = true;
+e.loadDate = loadDate;
+
+await saveData();
+
+render();
+}
 function filterByClient(data) {
   return globalClientFilter ? data.filter(e => e.clientId === globalClientFilter) : data;
 }
 
 function entryRow(e) {
-  const isUnmatched = e.op === 'load-unmatched';
-  const inYard = e.op === 'unload' && !e.loadDate;
+  const inYard =
+    !e.deleted &&
+    e.op === 'unload' &&
+    !e.loaded;
   const isCross = e.op === 'cross';
   const r = calcTotal(e);
-  const storageCost = isUnmatched ? '�' : 'RO ' + r.storageCost.toFixed(2);
-  const opCost = isUnmatched ? '�' : 'RO ' + r.opCost.toFixed(2);
-  const total = isUnmatched ? '�' : 'RO ' + r.total.toFixed(2);
-  const days = isUnmatched ? '�' : r.days;
-  const opBadge = isUnmatched ? '<span class="badge badge-warn">? load (no unload)</span>' :
-    isCross ? '<span class="badge badge-cross">Cross-load</span>' :
-    inYard ? '<span class="badge badge-in">In yard</span>' :
-    '<span class="badge badge-out">Departed</span>';
-  const rowClass = isUnmatched ? 'highlight-error' : inYard ? 'row-inyard' : '';
+  const storageCost = 'RO ' + r.storageCost.toFixed(2);
+  const opCost = 'RO ' + r.opCost.toFixed(2);
+  const total = 'RO ' + r.total.toFixed(2);
+const days = r.days;
+  const opBadge =
+    isCross
+      ? '<span class="badge badge-cross">Cross-load</span>'
+      : inYard
+        ? '<span class="badge badge-in">In yard</span>'
+      : '<span class="badge badge-out">Loaded</span>';
+ const rowClass =
+   inYard
+     ? 'row-inyard'
+    : '';
   const ci = clientById(e.clientId);
   const ai = avatarIdx(e.clientId);
   const clientCell = ci ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="client-avatar" style="width:22px;height:22px;background:${AV_BG[ai]};color:${AV_TX[ai]};font-size:10px">${initials(ci.name)}</span>${ci.name}</span>` : '<span style="color:var(--text2)">�</span>';
-  const invCell = e.invoiced ?
-    `<span class="badge badge-inv">${e.invoiceNo}</span> <button class="btn btn-sm" onclick="unmarkInvoice('${e.id}')" title="Remove">?</button>` :
-    (e.loadDate || isCross ? `<button class="btn btn-sm" onclick="openInvModal('${e.id}')">Mark invoiced</button>` : '<span style="color:var(--text2);font-size:11px">In yard</span>');
+  const invCell =
+    e.invoiced
+      ? `<span class="badge badge-inv">${e.invoiceNo}</span>
+         <button class="btn btn-sm"
+           onclick="unmarkInvoice('${e.id}')"
+           title="Remove">✕</button>`
+      : (
+          e.loaded || isCross
+            ? `<button class="btn btn-sm"
+                 onclick="openInvModal('${e.id}')">
+                 Mark invoiced
+               </button>`
+            : '<span style="color:var(--text2);font-size:11px">In yard</span>'
+      );
   return `<tr class="${rowClass}">
-    <td><strong>${e.containerNo}</strong>${e.vessel ? '<br><span style="font-size:11px;color:var(--text2)">'+e.vessel+'</span>' : ''}</td>
-    <td>${clientCell}</td>
+<td><strong>${e.containerNo}</strong></td>
+<td>${clientCell}</td>
     <td>${opBadge}</td>
     <td>${fmt(e.unloadDate)}</td>
     <td>${fmt(e.loadDate)}</td>
@@ -540,6 +693,16 @@ function entryRow(e) {
     <td>${storageCost}</td>
     <td>${opCost}</td>
     <td><strong>${total}</strong></td>
+    <td>
+	  ${
+	    inYard
+	      ? `<button class="btn btn-sm"
+	           onclick="markLoaded('${e.id}')">
+	           Loaded
+	         </button>`
+	      : ''
+	  }
+</td>
     <td>${invCell}</td>
     <td><button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">�</button></td>
   </tr>`;
@@ -572,19 +735,48 @@ function renderStats() {
 }
 
 function renderYard() {
-  let data = filterByClient(DB.filter(e => !e.deleted));
-  const inYard = data.filter(e => e.op === 'unload' && !e.loadDate);
-  const unmatched = data.filter(e => e.op === 'load-unmatched');
-  let rows = inYard.map(e => entryRow(e)).join('');
-  if (unmatched.length) {
-    rows += `<tr><td colspan="11" style="padding:5px 8px;font-size:11px;color:var(--text2);background:var(--bg2)"><i class="ti ti-alert-triangle" aria-hidden="true" style="color:#E24B4A"></i> Unmatched loading entries � no corresponding unload found</td></tr>`;
-    rows += unmatched.map(e => entryRow(e)).join('');
-  }
-  const totalS = inYard.reduce((s,e) => s + calcTotal(e).storageCost, 0);
-  const totalO = inYard.reduce((s,e) => s + calcTotal(e).opCost, 0);
-  const tfoot = inYard.length ? `<tfoot><tr class="tfoot-row"><td colspan="6" style="padding:7px 8px;font-size:11px">Accrued storage as of today</td><td>RO ${totalS.toFixed(2)}</td><td>RO ${totalO.toFixed(2)}</td><td>RO ${(totalS+totalO).toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
-  document.getElementById('tab-yard').innerHTML = tableWrap(rows, tfoot);
-  if (!inYard.length && !unmatched.length) document.getElementById('tab-yard').innerHTML = '<div class="empty">No containers currently in yard.</div>';
+
+let data =
+filterByClient(
+DB.filter(e => !e.deleted)
+);
+
+const inYard =
+data.filter(
+e =>
+e.op === 'unload' &&
+!e.loaded
+);
+
+let rows =
+inYard
+.map(e => entryRow(e))
+.join('');
+
+const totalS =
+inYard.reduce(
+(s,e) => s + calcTotal(e).storageCost,
+0
+);
+
+const totalO =
+inYard.reduce(
+(s,e) => s + calcTotal(e).opCost,
+0
+);
+
+const tfoot =
+inYard.length
+? `<tfoot> <tr class="tfoot-row"> <td colspan="6" style="padding:7px 8px;font-size:11px"> Accrued storage as of today </td> <td>RO ${totalS.toFixed(2)}</td> <td>RO ${totalO.toFixed(2)}</td> <td>RO ${(totalS + totalO).toFixed(2)}</td> <td colspan="2"></td> </tr> </tfoot>`
+: '';
+
+document.getElementById('tab-yard').innerHTML =
+tableWrap(rows, tfoot);
+
+if (!inYard.length) {
+document.getElementById('tab-yard').innerHTML =
+'No containers currently in yard.';
+}
 }
 
 function renderAll() {
