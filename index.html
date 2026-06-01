@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Yard Container Tracker</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --bg: #ffffff;
@@ -887,6 +888,11 @@ document.getElementById('tab-yard').innerHTML =
 function renderAll() {
   const clientOpts = CLIENTS.filter(c => !c.deleted).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
   document.getElementById('tab-all').innerHTML = `<div class="filter-bar">
+  <button
+    class="btn btn-primary"
+    onclick="exportBillingSheet()">
+    Export Billing Sheet
+</button>
     <input id="f-search" placeholder="Container / client" oninput="renderAllTable()" style="width:160px">
     <select id="f-status" onchange="renderAllTable()"><option value="">All statuses</option><option value="inyard">In yard</option><option value="departed">Departed</option><option value="cross">Cross-load</option><option value="warn">Unmatched</option></select>
     <select id="f-inv2" onchange="renderAllTable()"><option value="">All</option><option value="0">Not invoiced</option><option value="1">Invoiced</option></select>
@@ -974,9 +980,17 @@ ${lastLoaded ? fmt(lastLoaded) : '-'}
 }
 
 function viewClient(id) {
+
   globalClientFilter = id;
-  document.getElementById('global-client-filter').value = id;
-  switchTab('all', document.querySelectorAll('.tab')[1]);
+
+  document.getElementById(
+    'global-client-filter'
+  ).value = id;
+
+  switchTab(
+    'all',
+    document.getElementById('tab-btn-all')
+  );
 }
 
 function renderRates() {
@@ -1049,6 +1063,104 @@ async function syncNow() {
   populateClientDropdowns();
   render();
   alert('Data synchronized');
+}
+function exportBillingSheet() {
+
+  let data =
+    DB.filter(e =>
+      !e.deleted &&
+      !e.invoiced &&
+      (
+        e.loaded ||
+        e.op === 'cross'
+      )
+    );
+
+  if (globalClientFilter) {
+    data =
+      data.filter(
+        e => e.clientId === globalClientFilter
+      );
+  }
+
+  if (!data.length) {
+    alert(
+      'No ready-to-invoice containers found.'
+    );
+    return;
+  }
+
+  const client =
+    globalClientFilter
+      ? clientName(globalClientFilter)
+      : 'All Clients';
+
+ const rows = [];
+
+  let totalStorage = 0;
+  let totalHandling = 0;
+  let grandTotal = 0;
+
+  data.forEach(e => {
+
+    const r = calcTotal(e);
+
+    totalStorage += r.storageCost;
+    totalHandling += r.opCost;
+    grandTotal += r.total;
+
+rows.push({
+  'Container No': e.containerNo,
+  'Gate In': fmt(e.unloadDate),
+  'Gate Out': fmt(e.loadDate),
+  'Days': r.days,
+  'Storage Charges': r.storageCost.toFixed(3),
+  'Load Off / Load On': r.opCost.toFixed(3),
+  'Total Charges': r.total.toFixed(3)
+});
+
+  });
+
+  rows.push({});
+
+  rows.push({
+    'Container No': 'TOTAL',
+    'Storage Charges': totalStorage.toFixed(3),
+    'Load Off / Load On': totalHandling.toFixed(3),
+    'Total Charges': grandTotal.toFixed(3)
+});
+
+  const ws =
+    XLSX.utils.json_to_sheet(rows);
+
+ ws['!cols'] = [
+   { wch: 18 },
+   { wch: 15 },
+   { wch: 15 },
+   { wch: 10 },
+   { wch: 18 },
+   { wch: 20 },
+   { wch: 18 }
+];
+
+  const wb =
+    XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    'Billing'
+  );
+
+
+  const filename =
+    `${client}_Billing_${today()}.xlsx`;
+
+  XLSX.writeFile(
+    wb,
+    filename
+  );
+
 }
 
 function render() {
