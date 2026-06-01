@@ -64,6 +64,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .btn:hover { background: var(--bg2); }
 .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
 .btn-primary:hover { opacity: 0.85; }
+.btn-client{
+  background:#2563eb;
+  color:#fff;
+  border:none;
+}
+
+.btn-bulk{
+  background:#16a34a;
+  color:#fff;
+  border:none;
+}
 .btn-sm { padding: 3px 9px; font-size: 12px; }
 .btn-danger { border-color: #E24B4A; color: #A32D2D; }
 .btn-danger:hover { background: #FCEBEB; }
@@ -145,8 +156,8 @@ table tbody tr:nth-child(even) {
   Sync
 </button>
 
-<button class="btn" onclick="openClientModal()">
-  <i class="ti ti-user-plus"></i>
+<button class="btn btn-client" onclick="openClientModal()">
+<i class="ti ti-user-plus"></i>
   Add Client
 </button>
 
@@ -154,8 +165,13 @@ table tbody tr:nth-child(even) {
   <i class="ti ti-plus"></i>
   New Entry
 </button>
+<button class="btn btn-bulk" onclick="openBulkModal()">
+<i class="ti ti-stack-2"></i>
+  Bulk Entry
+</button>
   </div>
 </div>
+
 
 <div class="container">
   <div class="stats-grid" id="stats"></div>
@@ -212,6 +228,62 @@ table tbody tr:nth-child(even) {
       <button class="btn" onclick="closeModal('modal-add')">Cancel</button>
       <button class="btn btn-primary" onclick="saveEntry()">Save entry</button>
     </div>
+  </div>
+</div>
+<div id="modal-bulk" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Bulk Container Entry
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="bulk-client"></select>
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Sales Ref</label>
+      <input id="bulk-salesref" placeholder="Sales person">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Default Gate In Date</label>
+      <input id="bulk-date" type="date">
+    </div>
+
+   <div class="field">
+     <label>Container Numbers</label>
+     <textarea
+       id="bulk-list"
+       style="height:220px"
+       placeholder="REGU1235760&#10;REGU3228672&#10;TGBU8071201"></textarea>
+   </div>
+
+   <button
+     class="btn"
+     onclick="generateBulkRows()">
+     Generate
+   </button>
+
+   <div id="bulk-preview" style="margin-top:10px"></div>
+
+<div class="modal-btns">
+
+    <div class="modal-btns">
+      <button
+        class="btn"
+        onclick="closeModal('modal-bulk')">
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        onclick="saveBulkEntries()">
+        Save All
+      </button>
+    </div>
+
   </div>
 </div>
 <!-- Client Modal -->
@@ -377,6 +449,47 @@ function calcStorage(a, b) {
   }
   return { days, cost };
 }
+function generateBulkRows() {
+
+  const defaultDate =
+    document.getElementById('bulk-date').value;
+
+  const lines =
+    document.getElementById('bulk-list')
+      .value
+      .split('\n')
+      .map(x => x.trim().toUpperCase())
+      .filter(Boolean);
+
+  let html = `
+    <table style="width:100%">
+      <tr>
+        <th>Container</th>
+        <th>Date</th>
+      </tr>
+  `;
+
+  lines.forEach((cnum,i) => {
+
+    html += `
+      <tr>
+        <td>${cnum}</td>
+        <td>
+          <input
+            type="date"
+            id="bulk-row-date-${i}"
+            value="${defaultDate}">
+        </td>
+      </tr>
+    `;
+
+  });
+
+  html += '</table>';
+
+  document.getElementById('bulk-preview')
+    .innerHTML = html;
+}
 
 function calcTotal(e) {
 
@@ -407,6 +520,96 @@ function calcTotal(e) {
     opCost,
     total: cost + opCost
   };
+}
+function openBulkModal() {
+
+  document.getElementById('bulk-list').value = '';
+
+  document.getElementById('bulk-date').value = today();
+
+  document.getElementById('bulk-salesref').value = '';
+
+  document.getElementById('bulk-client').innerHTML =
+    document.getElementById('f-client').innerHTML;
+
+  document.getElementById('bulk-client').value =
+    globalClientFilter || '';
+
+  document.getElementById('modal-bulk')
+    .classList.add('open');
+}
+async function saveBulkEntries() {
+
+  const clientId =
+    document.getElementById('bulk-client').value;
+
+  const salesRef =
+    document.getElementById('bulk-salesref')
+      .value.trim();
+
+  const lines =
+    document.getElementById('bulk-list')
+      .value
+      .split('\n')
+      .map(x => x.trim().toUpperCase())
+      .filter(Boolean);
+
+  if (!clientId) {
+    alert('Select a client.');
+    return;
+  }
+
+  let added = 0;
+
+for (const [i, cnum] of lines.entries()) {
+
+  const date =
+    document.getElementById(
+      `bulk-row-date-${i}`
+    ).value;
+
+    if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum))
+      continue;
+
+    const duplicate = DB.find(
+      e =>
+        !e.deleted &&
+        e.op === 'unload' &&
+        !e.loaded &&
+        e.containerNo === cnum
+    );
+
+    if (duplicate)
+      continue;
+
+    DB.push({
+      id: uid(),
+      containerNo: cnum,
+      op: 'unload',
+      unloadDate: date,
+      loaded: false,
+      loadDate: '',
+      clientId,
+      salesRef,
+      remarks: '',
+      invoiceNo: '',
+      invoiced: false,
+      deleted: false,
+      createdAt: new Date().toISOString()
+    });
+
+    added++;
+  }
+
+  await saveData();
+
+  closeModal('modal-bulk');
+
+  render();
+
+  alert(
+    `${added} container(s) added`
+  );
 }
 
 function populateClientDropdowns() {
