@@ -755,6 +755,7 @@ const days = r.days;
                </button>`
             : '<span style="font-size:13px;font-weight:600">In yard</span>'
       );
+
 return `<tr class="${rowClass}">
   <td><strong>${e.containerNo}</strong></td>
   <td>${clientCell}</td>
@@ -763,6 +764,14 @@ return `<tr class="${rowClass}">
   <td style="text-align:center">${days}</td>
   <td>${opBadge}</td>
   <td>${invCell}</td>
+  <td>
+    <button
+      class="btn btn-sm btn-danger"
+      onclick="deleteEntry('${e.id}')"
+      title="Delete">
+      🗑
+    </button>
+  </td>
 </tr>`;
 }
 function yardRow(e) {
@@ -807,6 +816,7 @@ function tableWrap(rows, tfoot) {
 <th style="text-align:center">Days</th>
       <th>Status</th>
    <th>Invoice</th>
+  <th></th>
     </tr></thead>
     <tbody>${rows || '<tr><td colspan="7" class="empty">No records found.</td></tr>'}</tbody>
     ${tfoot || ''}
