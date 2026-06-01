@@ -69,11 +69,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; padding: 7px 8px; font-weight: 500; font-size: 11px; color: var(--text2); border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+th {
+  text-align: left;
+  padding: 7px 8px;
+  font-weight: 700;
+  font-size: 14px;
+color: #000;
+  background: #e2e2e2;
+  border-bottom: 0.5px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
 td { padding: 7px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
 .tfoot-row td { font-weight: 500; background: var(--bg2); }
-.badge { display: inline-block; padding: 2px 7px; border-radius: var(--radius); font-size: 11px; font-weight: 500; }
+.badge { display: inline-block; padding: 4px 10px; border-radius: var(--radius); font-size: 13px; font-weight: 600; }
 .badge-in { background: #E1F5EE; color: #085041; }
 .badge-out { background: #EAF3DE; color: #27500A; }
 .badge-cross { background: #EEEDFE; color: #3C3489; }
@@ -81,6 +93,10 @@ tr:last-child td { border-bottom: none; }
 .badge-inv { background: #E6F1FB; color: #0C447C; }
 .row-warn { background: rgba(250,238,218,0.3); }
 .row-inyard { background: rgba(225,245,238,0.15); }
+table tbody tr:nth-child(even) {
+  background: #ebebeb;
+
+}
 .highlight-error { background: rgba(252,235,235,0.35); }
 .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
 .filter-bar input, .filter-bar select { padding: 6px 10px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
@@ -124,7 +140,19 @@ tr:last-child td { border-bottom: none; }
     <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
       <option value="">All clients</option>
     </select>
-    <button class="btn" onclick="syncNow()">Sync</button><button class="btn btn-primary" onclick="openAddModal()"><i class="ti ti-plus" aria-hidden="true"></i> New Entry</button>
+ <button class="btn" onclick="syncNow()">
+  Sync
+</button>
+
+<button class="btn" onclick="openClientModal()">
+  <i class="ti ti-user-plus"></i>
+  Add Client
+</button>
+
+<button class="btn btn-primary" onclick="openAddModal()">
+  <i class="ti ti-plus"></i>
+  New Entry
+</button>
   </div>
 </div>
 
@@ -190,7 +218,6 @@ tr:last-child td { border-bottom: none; }
 <div id="modal-client" class="modal-overlay">
   <div class="modal">
 
-```
 <div class="modal-title" id="client-modal-title">
   Add Client
 </div>
@@ -215,7 +242,6 @@ tr:last-child td { border-bottom: none; }
     Save Client
   </button>
 </div>
-```
 
   </div>
 </div>
@@ -235,6 +261,36 @@ tr:last-child td { border-bottom: none; }
     </div>
   </div>
 </div>
+
+<div id="modal-load" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Mark Container Loaded
+    </div>
+
+    <div class="field">
+      <label>Load Date</label>
+      <input id="load-date" type="date">
+    </div>
+
+    <div class="modal-btns">
+      <button
+        class="btn"
+        onclick="closeModal('modal-load')">
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        onclick="saveLoadedDate()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
+
 
 <script>
 
@@ -265,6 +321,7 @@ let currentTab = 'yard';
 let globalClientFilter = '';
 let editingClientId = null;
 let pendingInvEntry = null;
+let currentLoadId = null;
 
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
 
@@ -624,22 +681,36 @@ async function deleteEntry(id) {
 }
 async function markLoaded(id) {
 
-const e =
-DB.find(x => x.id === id);
+  currentLoadId = id;
 
-if (!e) return;
-const loadDate =
-    prompt(
-      'Enter load date (YYYY-MM-DD)',
-      new Date().toISOString().slice(0,10)
-    );
+  document.getElementById('load-date').value =
+    new Date().toISOString().slice(0,10);
+
+  document
+    .getElementById('modal-load')
+    .classList
+    .add('open');
+}
+async function saveLoadedDate() {
+
+  const loadDate =
+    document.getElementById('load-date').value;
+
   if (!loadDate) return;
-e.loaded = true;
-e.loadDate = loadDate;
 
-await saveData();
+  const e =
+    DB.find(x => x.id === currentLoadId);
 
-render();
+  if (!e) return;
+
+  e.loaded = true;
+  e.loadDate = loadDate;
+
+  await saveData();
+
+  closeModal('modal-load');
+
+  render();
 }
 function filterByClient(data) {
   return globalClientFilter ? data.filter(e => e.clientId === globalClientFilter) : data;
@@ -668,7 +739,8 @@ const days = r.days;
     : '';
   const ci = clientById(e.clientId);
   const ai = avatarIdx(e.clientId);
-  const clientCell = ci ? `<span style="display:inline-flex;align-items:center;gap:6px"><span class="client-avatar" style="width:22px;height:22px;background:${AV_BG[ai]};color:${AV_TX[ai]};font-size:10px">${initials(ci.name)}</span>${ci.name}</span>` : '<span style="color:var(--text2)">�</span>';
+  const clientCell =
+  ci ? ci.name : '';
   const invCell =
     e.invoiced
       ? `<span class="badge badge-inv">${e.invoiceNo}</span>
@@ -681,41 +753,79 @@ const days = r.days;
                  onclick="openInvModal('${e.id}')">
                  Mark invoiced
                </button>`
-            : '<span style="color:var(--text2);font-size:11px">In yard</span>'
+            : '<span style="font-size:13px;font-weight:600">In yard</span>'
       );
-  return `<tr class="${rowClass}">
-<td><strong>${e.containerNo}</strong></td>
-<td>${clientCell}</td>
-    <td>${opBadge}</td>
-    <td>${fmt(e.unloadDate)}</td>
-    <td>${fmt(e.loadDate)}</td>
-    <td style="text-align:center">${days}</td>
-    <td>${storageCost}</td>
-    <td>${opCost}</td>
-    <td><strong>${total}</strong></td>
-    <td>
-	  ${
-	    inYard
-	      ? `<button class="btn btn-sm"
-	           onclick="markLoaded('${e.id}')">
-	           Loaded
-	         </button>`
-	      : ''
-	  }
-</td>
-    <td>${invCell}</td>
-    <td><button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">�</button></td>
-  </tr>`;
+return `<tr class="${rowClass}">
+  <td><strong>${e.containerNo}</strong></td>
+  <td>${clientCell}</td>
+  <td>${fmt(e.unloadDate)}</td>
+  <td>${fmt(e.loadDate)}</td>
+  <td style="text-align:center">${days}</td>
+  <td>${opBadge}</td>
+  <td>${invCell}</td>
+</tr>`;
+}
+function yardRow(e) {
+
+const ci =
+clientById(e.clientId);
+
+const clientName =
+ci ? ci.name : '';
+
+const days =
+calcTotal(e).days;
+
+return `
+<tr>
+  <td><strong>${e.containerNo}</strong></td>
+  <td>${clientName}</td>
+  <td>${fmt(e.unloadDate)}</td>
+  <td style="text-align:center">${days}</td>
+  <td>
+    <span class="badge badge-in">
+      In Yard
+    </span>
+  </td>
+  <td>
+    <button
+      class="btn btn-sm"
+      onclick="markLoaded('${e.id}')">
+      Loaded
+    </button>
+  </td>
+</tr>`;
 }
 
 function tableWrap(rows, tfoot) {
   return `<div class="overflow-x"><table>
     <thead><tr>
-      <th>Container no.</th><th>Client</th><th>Status</th><th>Unloaded</th><th>Loaded</th>
-      <th style="text-align:center">Days</th><th>Storage</th><th>Op. charge</th><th>Total</th><th>Invoice</th><th></th>
+      <th>Container no.</th>
+      <th>Client</th>
+      <th>Gate In</th>
+  <th>Gate Out</th>
+<th style="text-align:center">Days</th>
+      <th>Status</th>
+   <th>Invoice</th>
     </tr></thead>
-    <tbody>${rows || '<tr><td colspan="11" class="empty">No records found.</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="7" class="empty">No records found.</td></tr>'}</tbody>
     ${tfoot || ''}
+  </table></div>`;
+}
+function yardTableWrap(rows) {
+  return `<div class="overflow-x"><table>
+    <thead><tr>
+      <th>Container no.</th>
+      <th>Client</th>
+      <th>Gate In</th>
+      <th style="text-align:center">Days</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr></thead>
+    <tbody>${
+      rows ||
+      '<tr><td colspan="6" class="empty">No records found.</td></tr>'
+    }</tbody>
   </table></div>`;
 }
 
@@ -749,29 +859,14 @@ e.op === 'unload' &&
 );
 
 let rows =
-inYard
-.map(e => entryRow(e))
-.join('');
+  inYard
+    .map(e => yardRow(e))
+    .join('');
 
-const totalS =
-inYard.reduce(
-(s,e) => s + calcTotal(e).storageCost,
-0
-);
-
-const totalO =
-inYard.reduce(
-(s,e) => s + calcTotal(e).opCost,
-0
-);
-
-const tfoot =
-inYard.length
-? `<tfoot> <tr class="tfoot-row"> <td colspan="6" style="padding:7px 8px;font-size:11px"> Accrued storage as of today </td> <td>RO ${totalS.toFixed(2)}</td> <td>RO ${totalO.toFixed(2)}</td> <td>RO ${(totalS + totalO).toFixed(2)}</td> <td colspan="2"></td> </tr> </tfoot>`
-: '';
+const tfoot = '';
 
 document.getElementById('tab-yard').innerHTML =
-tableWrap(rows, tfoot);
+yardTableWrap(rows);
 
 if (!inYard.length) {
 document.getElementById('tab-yard').innerHTML =
@@ -805,7 +900,10 @@ function renderAllTable() {
   if (inv === '0') data = data.filter(e => !e.invoiced);
   if (inv === '1') data = data.filter(e => e.invoiced);
   if (cl) data = data.filter(e => e.clientId === cl);
-  data.sort((a,b) => (b.unloadDate||b.loadDate||'').localeCompare(a.unloadDate||a.loadDate||''));
+ data.sort((a,b) =>
+  (b.loadDate || b.unloadDate || '')
+    .localeCompare(a.loadDate || a.unloadDate || '')
+);
   document.getElementById('all-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''));
 }
 
@@ -831,16 +929,28 @@ function renderClients() {
       const inYard = txAll.filter(e => e.op === 'unload' && !e.loadDate).length;
       const totalBilled = txAll.filter(e => e.invoiced).reduce((s,e) => s + calcTotal(e).total, 0);
       const pendingAmt = txAll.filter(e => !e.invoiced && (e.loadDate || e.op==='cross')).reduce((s,e) => s + calcTotal(e).total, 0);
+      const loadedTx =
+  txAll.filter(e => e.loadDate);
+
+const lastLoaded =
+  loadedTx.length
+    ? loadedTx
+        .sort((a,b) =>
+          (b.loadDate || '').localeCompare(a.loadDate || '')
+        )[0].loadDate
+    : '';
       html += `<div class="client-row">
         <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-weight:500;font-size:14px">${c.name}${c.code ? ` <span style="font-size:11px;color:var(--text2)">(${c.code})</span>` : ''}</div>
           <div class="client-summary">
             ${c.contact ? c.contact + ' � ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' � ' : ''}
-            <span style="color:#1D9E75">${inYard} in yard</span> �
-            ${txAll.length} total tx �
-            RO ${totalBilled.toFixed(2)} billed �
-            <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending</span>
+           <span style="color:#1D9E75">${inYard} in yard</span> •
+${txAll.length} total tx •
+Last loaded:
+${lastLoaded ? fmt(lastLoaded) : '-'} •
+RO ${totalBilled.toFixed(2)} billed •
+<span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending</span>
           </div>
           ${c.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${c.notes}</div>` : ''}
         </div>
@@ -858,7 +968,7 @@ function renderClients() {
 function viewClient(id) {
   globalClientFilter = id;
   document.getElementById('global-client-filter').value = id;
-  switchTab('yard', document.querySelectorAll('.tab')[0]);
+  switchTab('all', document.querySelectorAll('.tab')[1]);
 }
 
 function renderRates() {
@@ -895,7 +1005,32 @@ function switchTab(tab, el) {
   });
   render();
 }
+function applyUrlClientFilter() {
 
+  const clientName =
+    new URLSearchParams(window.location.search)
+      .get('client');
+
+  if (!clientName) return;
+
+  const client =
+    CLIENTS.find(
+      c =>
+        !c.deleted &&
+        c.name.toUpperCase() === clientName.toUpperCase()
+    );
+
+  if (!client) return;
+
+  globalClientFilter = client.id;
+
+  const filter =
+    document.getElementById('global-client-filter');
+
+  if (filter) {
+    filter.value = client.id;
+  }
+}
 
 async function syncNow() {
   await loadData();
@@ -917,6 +1052,9 @@ document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
 (async function(){
   await loadData();
   populateClientDropdowns();
+
+  applyUrlClientFilter();
+
   render();
 })();
 </script>
