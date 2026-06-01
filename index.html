@@ -136,7 +136,7 @@ table tbody tr:nth-child(even) {
       <div class="today-label" id="today-label"></div>
     </div>
   </div>
-  <div class="topbar-right">
+<div class="topbar-right" id="topbar-right">
     <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
       <option value="">All clients</option>
     </select>
@@ -166,6 +166,11 @@ table tbody tr:nth-child(even) {
       <button class="tab" onclick="switchTab('invoiced',this)">Invoiced</button>
       <button class="tab" onclick="switchTab('clients',this)">Clients</button>
       <button class="tab" onclick="switchTab('rates',this)">Rate Sheet</button>
+      <button id="tab-btn-yard" class="tab active" onclick="switchTab('yard',this)">In Yard</button>
+<button id="tab-btn-all" class="tab" onclick="switchTab('all',this)">All Transactions</button>
+<button id="tab-btn-invoiced" class="tab" onclick="switchTab('invoiced',this)">Invoiced</button>
+<button id="tab-btn-clients" class="tab" onclick="switchTab('clients',this)">Clients</button>
+<button id="tab-btn-rates" class="tab" onclick="switchTab('rates',this)">Rate Sheet</button>
     </div>
     <div style="padding:1.25rem">
       <div id="tab-yard"></div>
@@ -1031,6 +1036,10 @@ function applyUrlClientFilter() {
     filter.value = client.id;
   }
 }
+function isClientPortal() {
+  return !!new URLSearchParams(window.location.search)
+    .get('client');
+}
 
 async function syncNow() {
   await loadData();
@@ -1054,6 +1063,15 @@ document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
   populateClientDropdowns();
 
   applyUrlClientFilter();
+
+  if (isClientPortal()) {
+
+  document.getElementById('topbar-right').style.display = 'none';
+
+  document.getElementById('tab-btn-clients').style.display = 'none';
+
+  document.getElementById('tab-btn-rates').style.display = 'none';
+}
 
   render();
 })();
