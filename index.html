@@ -410,6 +410,14 @@ async function loadData() {
 }
 
 async function saveData() {
+  if (CLIENTS.length < 10 || DB.length < 50) {
+
+    alert(
+      `Save blocked.\n\nLoaded only ${CLIENTS.length} clients and ${DB.length} transactions.`
+    );
+
+    return;
+  }
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
