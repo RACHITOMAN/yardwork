@@ -269,20 +269,18 @@ table tbody tr:nth-child(even) {
    <div id="bulk-preview" style="margin-top:10px"></div>
 
 <div class="modal-btns">
+  <button
+    class="btn"
+    onclick="closeModal('modal-bulk')">
+    Cancel
+  </button>
 
-    <div class="modal-btns">
-      <button
-        class="btn"
-        onclick="closeModal('modal-bulk')">
-        Cancel
-      </button>
-
-      <button
-        class="btn btn-primary"
-        onclick="saveBulkEntries()">
-        Save All
-      </button>
-    </div>
+  <button
+    class="btn btn-primary"
+    onclick="saveBulkEntries()">
+    Save All
+  </button>
+</div>
 
   </div>
 </div>
