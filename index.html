@@ -410,7 +410,7 @@ async function loadData() {
 }
 
 async function saveData() {
-  if (CLIENTS.length < 10 || DB.length < 50) {
+  if (CLIENTS.length < 20 || DB.length < 100) {
 
     alert(
       `Save blocked.\n\nLoaded only ${CLIENTS.length} clients and ${DB.length} transactions.`
@@ -608,7 +608,7 @@ for (const [i, cnum] of lines.entries()) {
   }
 
   await saveData();
-
+await loadData();
   closeModal('modal-bulk');
 
   render();
@@ -751,7 +751,7 @@ DB.push({
 }
 
 await saveData();
-
+await loadData();
 closeModal('modal-add');
 
 render();
@@ -824,6 +824,7 @@ CLIENTS.push({
 }
 
 await saveData();
+await loadData();
 
 closeModal('modal-client');
 
