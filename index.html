@@ -169,6 +169,9 @@ table tbody tr:nth-child(even) {
 <i class="ti ti-stack-2"></i>
   Bulk Entry
 </button>
+<button class="btn" onclick="releaseAndExit()">
+  Release Lock
+</button>
   </div>
 </div>
 
@@ -397,11 +400,15 @@ let currentLoadId = null;
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
 
 async function loadData() {
+  console.log('LOADDATA STARTED');
   try {
     const res = await fetch(GOOGLE_SCRIPT_URL);
     const data = await res.json();
-    DB = data.transactions || [];
-    CLIENTS = data.clients || [];
+    console.log(data);
+DB = data.transactions || [];
+CLIENTS = data.clients || [];
+
+window.LOCK_INFO = data.lock || {};
   } catch(e) {
     console.error('Load error', e);
     DB = [];
@@ -923,6 +930,48 @@ async function saveLoadedDate() {
 
   render();
 }
+async function acquireLock(user) {
+
+  await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify({
+      action: 'acquireLock',
+      user
+    })
+  });
+
+}
+async function releaseLockClient() {
+
+  await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify({
+      action: 'releaseLock'
+    })
+  });
+  }
+  async function releaseAndExit() {
+
+  if (!confirm(
+    'Release system lock?'
+  )) return;
+
+  await releaseLockClient();
+
+  alert(
+    'Lock released.'
+  );
+
+  location.reload();
+
+}
+
 function filterByClient(data) {
   return globalClientFilter ? data.filter(e => e.clientId === globalClientFilter) : data;
 }
@@ -1383,8 +1432,24 @@ function render() {
 }
 
 document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
+
+console.log('APP STARTING');
 (async function(){
   await loadData();
+  if (!LOCK_INFO.lockedBy) {
+
+  await acquireLock('AKHIL');
+
+} else {
+
+  alert(
+    'System currently in use by ' +
+    LOCK_INFO.lockedBy
+  );
+
+  return;
+
+}
   populateClientDropdowns();
 
   applyUrlClientFilter();
