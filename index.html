@@ -47,7 +47,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .today-label { font-size: 12px; color: var(--text2); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 1.25rem; }
 .stat { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; text-align: center; }
 .stat-num { font-size: 22px; font-weight: 500; margin-top: 3px; }
 .stat-label { font-size: 11px; color: var(--text2); }
@@ -365,6 +365,37 @@ table tbody tr:nth-child(even) {
   </div>
 </div>
 
+<div id="modal-edit-dates" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Edit Container Dates
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Unload Date</label>
+      <input id="edit-unload-date" type="date">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Load Date</label>
+      <input id="edit-load-date" type="date">
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn"
+              onclick="closeModal('modal-edit-dates')">
+        Cancel
+      </button>
+
+      <button class="btn btn-primary"
+              onclick="saveEditedDates()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
 
 <script>
 
@@ -396,6 +427,8 @@ let globalClientFilter = '';
 let editingClientId = null;
 let pendingInvEntry = null;
 let currentLoadId = null;
+let currentEditId = null;
+let selectedInvoices = new Set();
 
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
 
@@ -551,6 +584,13 @@ function openBulkModal() {
   document.getElementById('modal-bulk')
     .classList.add('open');
 }
+function toggleInvoiceSelection(id, checked) {
+
+  if (checked)
+    selectedInvoices.add(id);
+  else
+    selectedInvoices.delete(id);
+}
 async function saveBulkEntries() {
 
   const clientId =
@@ -573,6 +613,9 @@ async function saveBulkEntries() {
   }
 
   let added = 0;
+const skippedExisting = [];
+const skippedRepeated = [];
+const seenInUpload = new Set();
 
 for (const [i, cnum] of lines.entries()) {
 
@@ -581,19 +624,26 @@ for (const [i, cnum] of lines.entries()) {
       `bulk-row-date-${i}`
     ).value;
 
-    if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum))
-      continue;
+   if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum))
+     continue;
 
-    const duplicate = DB.find(
-      e =>
-        !e.deleted &&
-        e.op === 'unload' &&
-        !e.loaded &&
-        e.containerNo === cnum
-    );
+   if (seenInUpload.has(cnum)) {
+     skippedRepeated.push(cnum);
+     continue;
+   }
 
-    if (duplicate)
-      continue;
+   seenInUpload.add(cnum);
+
+   const duplicate = DB.find(
+     e =>
+       !e.deleted &&
+       e.containerNo === cnum
+   );
+
+   if (duplicate) {
+     skippedExisting.push(cnum);
+     continue;
+}
 
     DB.push({
       id: uid(),
@@ -620,9 +670,29 @@ await loadData();
 
   render();
 
-  alert(
-    `${added} container(s) added`
-  );
+ let msg =
+   `Imported: ${added}\n\n`;
+
+ msg +=
+   `Skipped Existing: ${skippedExisting.length}\n`;
+
+ if (skippedExisting.length) {
+   msg +=
+     '\nSkipped Existing:\n' +
+     skippedExisting.join('\n') +
+     '\n';
+ }
+
+ msg +=
+   `\nSkipped Repeated In Upload: ${skippedRepeated.length}\n`;
+
+ if (skippedRepeated.length) {
+   msg +=
+     '\nSkipped Repeated In Upload:\n' +
+     skippedRepeated.join('\n');
+ }
+
+alert(msg);
 }
 
 function populateClientDropdowns() {
@@ -930,6 +1000,61 @@ async function saveLoadedDate() {
 
   render();
 }
+function openEditDates(id) {
+
+  const e =
+    DB.find(x => x.id === id);
+
+  if (!e) return;
+
+  currentEditId = id;
+
+  document.getElementById('edit-unload-date').value =
+    e.unloadDate || '';
+
+  document.getElementById('edit-load-date').value =
+    e.loadDate || '';
+
+  document
+    .getElementById('modal-edit-dates')
+    .classList
+    .add('open');
+}
+async function saveEditedDates() {
+
+  const e =
+    DB.find(x => x.id === currentEditId);
+
+  if (!e) return;
+
+  const unloadDate =
+    document.getElementById('edit-unload-date').value;
+
+  const loadDate =
+    document.getElementById('edit-load-date').value;
+
+  if (
+    unloadDate &&
+    loadDate &&
+    loadDate < unloadDate
+  ) {
+    alert(
+      'Load date cannot be earlier than unload date.'
+    );
+    return;
+  }
+
+  e.unloadDate = unloadDate || '';
+  e.loadDate = loadDate || '';
+
+  e.loaded = !!loadDate;
+
+  await saveData();
+
+  closeModal('modal-edit-dates');
+
+  render();
+}
 async function acquireLock(user) {
 
   await fetch(GOOGLE_SCRIPT_URL, {
@@ -1017,6 +1142,12 @@ const days = r.days;
       );
 
 return `<tr class="${rowClass}">
+  <td>
+    <input
+      type="checkbox"
+      onchange="toggleInvoiceSelection('${e.id}', this.checked)">
+  </td>
+
   <td><strong>${e.containerNo}</strong></td>
   <td>${clientCell}</td>
   <td>${fmt(e.unloadDate)}</td>
@@ -1026,12 +1157,19 @@ return `<tr class="${rowClass}">
   <td>${invCell}</td>
   <td>
     <button
+      class="btn btn-sm"
+      onclick="openEditDates('${e.id}')"
+      title="Edit Dates">
+      📅
+    </button>
+
+    <button
       class="btn btn-sm btn-danger"
       onclick="deleteEntry('${e.id}')"
       title="Delete">
       🗑
     </button>
-  </td>
+</td>
 </tr>`;
 }
 function yardRow(e) {
@@ -1069,7 +1207,8 @@ return `
 function tableWrap(rows, tfoot) {
   return `<div class="overflow-x"><table>
     <thead><tr>
-      <th>Container no.</th>
+      <th style="width:40px"></th>
+<th>Container no.</th>
       <th>Client</th>
       <th>Gate In</th>
   <th>Gate Out</th>
@@ -1102,16 +1241,69 @@ function yardTableWrap(rows) {
 function renderStats() {
   let data = DB.filter(e => !e.deleted);
   if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
-  const inYard = data.filter(e => e.op === 'unload' && !e.loadDate).length;
-  const todayArr = data.filter(e => e.unloadDate === today()).length;
-  const pendingInv = data.filter(e => !e.invoiced && (e.loadDate || e.op === 'cross')).length;
-  const warns = data.filter(e => e.op === 'load-unmatched').length;
-  const label = globalClientFilter ? clientName(globalClientFilter) : 'All clients';
-  document.getElementById('stats').innerHTML = `
-    <div class="stat"><div class="stat-label">${label}</div><div class="stat-num" style="color:#1D9E75">${inYard} in yard</div></div>
-    <div class="stat"><div class="stat-label">Arrivals today</div><div class="stat-num">${todayArr}</div></div>
-    <div class="stat"><div class="stat-label">Pending invoice</div><div class="stat-num" style="color:#BA7517">${pendingInv}</div></div>
-    <div class="stat"><div class="stat-label">Unmatched loads</div><div class="stat-num" style="color:#E24B4A">${warns}</div></div>`;
+  const inYard =
+    data.filter(
+      e => e.op === 'unload' && !e.loaded
+    ).length;
+
+  const pendingUnloadLoad =
+    data.filter(
+      e =>
+        e.op === 'unload' &&
+        e.loaded &&
+        !e.invoiced
+    ).length;
+
+  const pendingCross =
+    data.filter(
+      e =>
+        e.op === 'cross' &&
+        !e.invoiced
+    ).length;
+
+  const totalPending =
+    pendingUnloadLoad +
+    pendingCross;
+
+  const clientCount =
+    CLIENTS.filter(
+      c => !c.deleted
+  ).length;
+ document.getElementById('stats').innerHTML = `
+   <div class="stat">
+     <div class="stat-label">In Yard</div>
+     <div class="stat-num" style="color:#1D9E75">
+       ${inYard}
+     </div>
+   </div>
+
+   <div class="stat">
+     <div class="stat-label">Unload+Load Pending</div>
+     <div class="stat-num" style="color:#BA7517">
+       ${pendingUnloadLoad}
+     </div>
+   </div>
+
+   <div class="stat">
+     <div class="stat-label">Cross-Load Pending</div>
+     <div class="stat-num" style="color:#2563EB">
+       ${pendingCross}
+     </div>
+   </div>
+
+   <div class="stat">
+     <div class="stat-label">Total Pending</div>
+     <div class="stat-num" style="color:#E24B4A">
+       ${totalPending}
+     </div>
+   </div>
+
+   <div class="stat">
+     <div class="stat-label">Clients</div>
+     <div class="stat-num">
+       ${clientCount}
+     </div>
+  </div>`;
 }
 
 function renderYard() {
@@ -1149,8 +1341,18 @@ function renderAll() {
   document.getElementById('tab-all').innerHTML = `<div class="filter-bar">
   <button
     class="btn btn-primary"
+    onclick="bulkInvoiceSelected()">
+    Assign Invoice
+</button>
+  <button
+    class="btn btn-primary"
     onclick="exportBillingSheet()">
     Export Billing Sheet
+</button>
+<button
+  class="btn btn-primary"
+  onclick="exportPendingInvoiceSummary()">
+  Pending Invoice Summary
 </button>
     <input id="f-search" placeholder="Container / client" oninput="renderAllTable()" style="width:160px">
     <select id="f-status" onchange="renderAllTable()"><option value="">All statuses</option><option value="inyard">In yard</option><option value="departed">Departed</option><option value="cross">Cross-load</option><option value="warn">Unmatched</option></select>
@@ -1175,10 +1377,23 @@ function renderAllTable() {
   if (inv === '0') data = data.filter(e => !e.invoiced);
   if (inv === '1') data = data.filter(e => e.invoiced);
   if (cl) data = data.filter(e => e.clientId === cl);
- data.sort((a,b) =>
-  (b.loadDate || b.unloadDate || '')
-    .localeCompare(a.loadDate || a.unloadDate || '')
-);
+data.sort((a, b) => {
+
+  const aInYard =
+    a.op === 'unload' &&
+    !a.loaded;
+
+  const bInYard =
+    b.op === 'unload' &&
+    !b.loaded;
+
+  if (aInYard && !bInYard) return -1;
+  if (!aInYard && bInYard) return 1;
+
+  return (a.unloadDate || '')
+    .localeCompare(b.unloadDate || '');
+
+});
   document.getElementById('all-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''));
 }
 
@@ -1316,6 +1531,51 @@ function isClientPortal() {
   return !!new URLSearchParams(window.location.search)
     .get('client');
 }
+async function bulkInvoiceSelected() {
+
+  if (!selectedInvoices.size) {
+    alert('Select at least one container.');
+    return;
+  }
+
+  const invoiceNo =
+    prompt('Enter invoice number');
+
+  if (!invoiceNo) return;
+
+  let updated = 0;
+  let skipped = 0;
+
+  DB.forEach(e => {
+
+if (!selectedInvoices.has(e.id))
+  return;
+
+if (e.invoiced) {
+  skipped++;
+  return;
+}
+
+e.invoiceNo = invoiceNo;
+e.invoiced = true;
+
+updated++;
+
+  });
+
+  await saveData();
+
+  selectedInvoices.clear();
+
+  render();
+
+  alert(
+    `Invoice Assigned
+
+  Updated: ${updated}
+  Skipped Already Invoiced: ${skipped}`
+);
+}
 
 async function syncNow() {
   await loadData();
@@ -1341,6 +1601,20 @@ function exportBillingSheet() {
         e => e.clientId === globalClientFilter
       );
   }
+  const unloadLoad =
+    data.filter(
+      e => e.op === 'unload'
+    );
+
+  const crossLoads =
+    data.filter(
+      e => e.op === 'cross'
+    );
+
+  data = [
+    ...unloadLoad,
+    ...crossLoads
+];
 
   if (!data.length) {
     alert(
@@ -1375,10 +1649,12 @@ rows.push({
   'Days': r.days,
   'Storage Charges': r.storageCost.toFixed(3),
   'Load Off / Load On': r.opCost.toFixed(3),
-  'Total Charges': r.total.toFixed(3)
+  'Total Charges': r.total.toFixed(3),
+  'Remarks': e.op === 'cross'
+    ? 'Cross Load'
+    : ''
 });
-
-  });
+});
 
   rows.push({});
 
@@ -1421,7 +1697,96 @@ rows.push({
   );
 
 }
+function exportPendingInvoiceSummary() {
 
+  const summary = {};
+
+  DB.forEach(e => {
+
+    if (
+      e.deleted ||
+      e.invoiced
+    ) return;
+
+    const isUnloadLoad =
+      e.op === 'unload' &&
+      e.loaded;
+
+    const isCross =
+      e.op === 'cross';
+
+    if (!isUnloadLoad && !isCross)
+      return;
+
+    const client =
+      clientName(e.clientId) || 'Unknown';
+
+    if (!summary[client]) {
+      summary[client] = {
+        unloadLoad: 0,
+        cross: 0
+      };
+    }
+
+    if (isUnloadLoad)
+      summary[client].unloadLoad++;
+
+    if (isCross)
+      summary[client].cross++;
+
+  });
+
+  const rows = [];
+
+  Object.keys(summary)
+    .sort()
+    .forEach(client => {
+
+      const u =
+        summary[client].unloadLoad;
+
+      const c =
+        summary[client].cross;
+
+      rows.push({
+        'Client': client,
+        'Unload + Load Pending': u,
+        'Cross Load Pending': c,
+        'Total Pending': u + c
+      });
+
+    });
+
+  if (!rows.length) {
+    alert('No pending invoices.');
+    return;
+  }
+
+  const ws =
+    XLSX.utils.json_to_sheet(rows);
+
+  ws['!cols'] = [
+    { wch: 35 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 15 }
+  ];
+
+  const wb =
+    XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    'Pending Summary'
+  );
+
+  XLSX.writeFile(
+    wb,
+    `Pending_Invoice_Summary_${today()}.xlsx`
+  );
+
+}
 function render() {
   renderStats();
   if (currentTab === 'yard') renderYard();
