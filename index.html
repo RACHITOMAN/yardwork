@@ -103,6 +103,8 @@ tr:last-child td { border-bottom: none; }
 .badge-cross { background: #EEEDFE; color: #3C3489; }
 .badge-warn { background: #FAEEDA; color: #633806; }
 .badge-inv { background: #E6F1FB; color: #0C447C; }
+.badge-paid { background: #E3F6E8; color: #1D7A3C; cursor: pointer; }
+.badge-unpaid { background: #FDECEC; color: #B3261E; cursor: pointer; }
 .row-warn { background: rgba(250,238,218,0.3); }
 .row-inyard { background: rgba(225,245,238,0.15); }
 table tbody tr:nth-child(even) {
@@ -391,6 +393,35 @@ table tbody tr:nth-child(even) {
 
       <button class="btn btn-primary"
               onclick="saveEditedDates()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<div id="modal-paid" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Mark Invoice Paid
+    </div>
+
+    <div class="field">
+      <label>Payment Date</label>
+      <input id="paid-date" type="date">
+    </div>
+
+    <div class="modal-btns">
+      <button
+        class="btn"
+        onclick="closeModal('modal-paid')">
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        onclick="savePaidDate()">
         Save
       </button>
     </div>
@@ -1041,8 +1072,37 @@ async function saveInvoice() {
 async function unmarkInvoice(id) {
   const e = DB.find(x => x.id === id);
   if (e && confirm('Remove invoice mark from ' + e.containerNo + '?')) {
-    e.invoiced = false; e.invoiceNo = null; render(); saveData();
+    e.invoiced = false; e.invoiceNo = null; e.paidDate = ''; render(); saveData();
   }
+}
+
+let currentPaidId = null;
+
+function togglePaid(id) {
+  const e = DB.find(x => x.id === id);
+  if (!e) return;
+  if (e.paidDate) {
+    if (confirm(`Unmark ${e.containerNo} as paid?`)) {
+      e.paidDate = '';
+      render();
+      saveData();
+    }
+    return;
+  }
+  currentPaidId = id;
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+}
+
+function savePaidDate() {
+  const date = document.getElementById('paid-date').value;
+  if (!date) return;
+  const e = DB.find(x => x.id === currentPaidId);
+  if (!e) return;
+  e.paidDate = date;
+  closeModal('modal-paid');
+  render();
+  saveData();
 }
 
 async function deleteEntry(id) {
@@ -1209,6 +1269,9 @@ const days = r.days;
   const invCell =
     e.invoiced
       ? `<span class="badge badge-inv">${e.invoiceNo}</span>
+         <span class="badge ${e.paidDate ? 'badge-paid' : 'badge-unpaid'}"
+           onclick="togglePaid('${e.id}')"
+           title="Click to ${e.paidDate ? 'unmark as paid' : 'mark as paid'}">${e.paidDate ? 'Paid ' + fmt(e.paidDate) : 'Unpaid'}</span>
          <button class="btn btn-sm"
            onclick="unmarkInvoice('${e.id}')"
            title="Remove">✕</button>`
@@ -1486,10 +1549,25 @@ data.sort((a, b) => {
 }
 
 function renderInvoiced() {
-  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced)).sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+  document.getElementById('tab-invoiced').innerHTML = `<div class="filter-bar">
+    <select id="f-paid" onchange="renderInvoicedTable()">
+      <option value="">All</option>
+      <option value="paid">Paid</option>
+      <option value="unpaid">Unpaid</option>
+    </select>
+  </div><div id="invoiced-table"></div>`;
+  renderInvoicedTable();
+}
+
+function renderInvoicedTable() {
+  const paidFilter = document.getElementById('f-paid') ? document.getElementById('f-paid').value : '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced));
+  if (paidFilter === 'paid') data = data.filter(e => e.paidDate);
+  if (paidFilter === 'unpaid') data = data.filter(e => !e.paidDate);
+  data.sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
   const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
   const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px;font-size:11px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>` : '';
-  document.getElementById('tab-invoiced').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''), tfoot);
+  document.getElementById('invoiced-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''), tfoot);
 }
 
 function renderClients() {
