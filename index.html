@@ -47,7 +47,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .today-label { font-size: 12px; color: var(--text2); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
 .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
-.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 1.25rem; }
 .stat { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; text-align: center; }
 .stat-num { font-size: 22px; font-weight: 500; margin-top: 3px; }
 .stat-label { font-size: 11px; color: var(--text2); }
@@ -133,7 +133,7 @@ table tbody tr:nth-child(even) {
 .client-summary { font-size: 12px; color: var(--text2); margin-top: 2px; }
 .overflow-x { overflow-x: auto; }
 @media (max-width: 600px) {
-  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
   .grid2 { grid-template-columns: 1fr; }
   .grid3 { grid-template-columns: 1fr; }
   .topbar { padding: 0 1rem; }
@@ -665,6 +665,9 @@ function toggleInvoiceSelection(id, checked) {
     selectedInvoices.add(id);
   else
     selectedInvoices.delete(id);
+
+  const btn = document.getElementById('mark-paid-btn');
+  if (btn) btn.textContent = `Mark Paid (${selectedInvoices.size})`;
 }
 
 function toggleLoadSelection(id, checked) {
@@ -1076,7 +1079,7 @@ async function unmarkInvoice(id) {
   }
 }
 
-let currentPaidId = null;
+let currentPaidIds = [];
 
 function togglePaid(id) {
   const e = DB.find(x => x.id === id);
@@ -1089,7 +1092,14 @@ function togglePaid(id) {
     }
     return;
   }
-  currentPaidId = id;
+  currentPaidIds = [id];
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+}
+
+function bulkMarkPaid() {
+  if (!selectedInvoices.size) return;
+  currentPaidIds = [...selectedInvoices];
   document.getElementById('paid-date').value = today();
   document.getElementById('modal-paid').classList.add('open');
 }
@@ -1097,12 +1107,22 @@ function togglePaid(id) {
 function savePaidDate() {
   const date = document.getElementById('paid-date').value;
   if (!date) return;
-  const e = DB.find(x => x.id === currentPaidId);
-  if (!e) return;
-  e.paidDate = date;
+  currentPaidIds.forEach(id => {
+    const e = DB.find(x => x.id === id);
+    if (e) e.paidDate = date;
+  });
+  currentPaidIds = [];
+  selectedInvoices.clear();
   closeModal('modal-paid');
   render();
   saveData();
+}
+
+function selectInvoiceGroup(invoiceNo) {
+  const ids = DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo === invoiceNo).map(e => e.id);
+  const allSelected = ids.every(id => selectedInvoices.has(id));
+  ids.forEach(id => allSelected ? selectedInvoices.delete(id) : selectedInvoices.add(id));
+  render();
 }
 
 async function deleteEntry(id) {
@@ -1268,7 +1288,7 @@ const days = r.days;
   ci ? ci.name : '';
   const invCell =
     e.invoiced
-      ? `<span class="badge badge-inv">${e.invoiceNo}</span>
+      ? `<span class="badge badge-inv" style="cursor:pointer" onclick="selectInvoiceGroup('${e.invoiceNo}')" title="Click to select all containers on this invoice">${e.invoiceNo}</span>
          <span class="badge ${e.paidDate ? 'badge-paid' : 'badge-unpaid'}"
            onclick="togglePaid('${e.id}')"
            title="Click to ${e.paidDate ? 'unmark as paid' : 'mark as paid'}">${e.paidDate ? 'Paid ' + fmt(e.paidDate) : 'Unpaid'}</span>
@@ -1414,6 +1434,13 @@ function renderStats() {
     CLIENTS.filter(
       c => !c.deleted
   ).length;
+
+  const invoiceGroups = {};
+  data.filter(e => e.invoiced && e.invoiceNo).forEach(e => {
+    (invoiceGroups[e.invoiceNo] = invoiceGroups[e.invoiceNo] || []).push(e);
+  });
+  const unpaidInvoices = Object.values(invoiceGroups).filter(g => g.some(e => !e.paidDate)).length;
+
  document.getElementById('stats').innerHTML = `
    <div class="stat">
      <div class="stat-label">In Yard</div>
@@ -1440,6 +1467,13 @@ function renderStats() {
      <div class="stat-label">Total Pending</div>
      <div class="stat-num" style="color:#E24B4A">
        ${totalPending}
+     </div>
+   </div>
+
+   <div class="stat">
+     <div class="stat-label">Unpaid Invoices</div>
+     <div class="stat-num" style="color:#B3261E">
+       ${unpaidInvoices}
      </div>
    </div>
 
@@ -1550,6 +1584,7 @@ data.sort((a, b) => {
 
 function renderInvoiced() {
   document.getElementById('tab-invoiced').innerHTML = `<div class="filter-bar">
+    <button id="mark-paid-btn" class="btn btn-primary" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
     <select id="f-paid" onchange="renderInvoicedTable()">
       <option value="">All</option>
       <option value="paid">Paid</option>
