@@ -149,6 +149,7 @@ table tbody tr:nth-child(even) {
     </div>
   </div>
 <div class="topbar-right" id="topbar-right">
+    <span id="sync-status" style="font-size:12px;color:var(--text2);min-width:70px;text-align:right"></span>
     <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
       <option value="">All clients</option>
     </select>
@@ -217,7 +218,7 @@ table tbody tr:nth-child(even) {
     </div>
     <div class="field" style="margin-bottom:10px">
       <label>Client</label>
-      <select id="f-client"><option value="">� Select client �</option></select>
+      <select id="f-client"><option value="">— Select client —</option></select>
     </div>
     <div class="field" style="margin-bottom:10px">
      <label>Sales Ref</label>
@@ -397,6 +398,30 @@ table tbody tr:nth-child(even) {
   </div>
 </div>
 
+<div id="modal-bulk-load" class="modal-overlay">
+  <div class="modal" style="max-width:480px">
+
+    <div class="modal-title">
+      Mark Containers Loaded
+    </div>
+
+    <div id="bulk-load-rows" style="max-height:320px;overflow-y:auto;margin-bottom:10px"></div>
+
+    <div class="modal-btns">
+      <button class="btn"
+              onclick="closeModal('modal-bulk-load')">
+        Cancel
+      </button>
+
+      <button class="btn btn-primary"
+              onclick="saveBulkLoad()">
+        Save all
+      </button>
+    </div>
+
+  </div>
+</div>
+
 <script>
 
 /*
@@ -415,8 +440,8 @@ POST -> {
 }
 */
 
-const RATES = [{days:3,rate:3},{days:2,rate:4},{days:2,rate:5},{days:Infinity,rate:10}];
-const OP_UNLOAD = 17, OP_CROSS = 20;
+const STORAGE_RATE_PER_DAY = 3; // flat rate, RO per day
+const OP_UNLOAD = 15, OP_CROSS = 20; // unload+load together = RO 30
 const AV_BG = ['#E1F5EE','#EEEDFE','#E6F1FB','#FAEEDA','#FAECE7','#EAF3DE','#FBEAF0'];
 const AV_TX = ['#085041','#3C3489','#0C447C','#633806','#712B13','#27500A','#72243E'];
 
@@ -429,6 +454,7 @@ let pendingInvEntry = null;
 let currentLoadId = null;
 let currentEditId = null;
 let selectedInvoices = new Set();
+let selectedLoad = new Set();
 
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
 
@@ -449,15 +475,26 @@ window.LOCK_INFO = data.lock || {};
   }
 }
 
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  if (state === 'saving') el.textContent = 'Saving…';
+  else if (state === 'saved') { el.textContent = 'Saved'; setTimeout(() => { if (el.textContent === 'Saved') el.textContent = ''; }, 1500); }
+  else if (state === 'error') el.textContent = 'Sync failed';
+  else el.textContent = '';
+}
+
+// Guard against wiping the sheet if loadData() never populated CLIENTS/DB
+// (e.g. first load failed). Adjust these floors if your real dataset is smaller.
+const MIN_CLIENTS_TO_SAVE = 20;
+const MIN_TRANSACTIONS_TO_SAVE = 100;
+
 async function saveData() {
-  if (CLIENTS.length < 20 || DB.length < 100) {
-
-    alert(
-      `Save blocked.\n\nLoaded only ${CLIENTS.length} clients and ${DB.length} transactions.`
-    );
-
+  if (CLIENTS.length < MIN_CLIENTS_TO_SAVE || DB.length < MIN_TRANSACTIONS_TO_SAVE) {
+    alert(`Save blocked.\n\nLoaded only ${CLIENTS.length} clients and ${DB.length} transactions.`);
     return;
   }
+  setSyncStatus('saving');
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
@@ -467,33 +504,40 @@ async function saveData() {
         clients: CLIENTS,
         transactions: DB
       })
-});
-  } catch(e) {
+    });
+    setSyncStatus('saved');
+  } catch (e) {
     console.error('Save error', e);
+    setSyncStatus('error');
   }
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function today() { return new Date().toISOString().slice(0,10); }
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function fmt(d) {
-  if (!d) return '�';
+  if (!d) return '–';
   return new Date(d).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
 }
 
 function clientById(id) { return CLIENTS.find(c => c.id === id) || null; }
-function clientName(id) { const c = clientById(id); return c ? c.name : '�'; }
+function clientName(id) { const c = clientById(id); return c ? c.name : '–'; }
 function avatarIdx(id) { const i = CLIENTS.findIndex(c => c.id === id); return i < 0 ? 0 : i % AV_BG.length; }
 function initials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
 
 function calcStorage(a, b) {
+  // Same-day gate in and gate out: no storage charge.
+  if (a && b && a === b) return { days: 0, cost: 0 };
   const da = new Date(a), db = b ? new Date(b) : new Date();
   const days = Math.max(1, Math.ceil((db - da) / 864e5));
-  let cost = 0, rem = days;
-  for (const t of RATES) {
-    const u = Math.min(rem, t.days === Infinity ? rem : t.days);
-    cost += u * t.rate; rem -= u;
-    if (rem <= 0) break;
-  }
-  return { days, cost };
+  return { days, cost: days * STORAGE_RATE_PER_DAY };
 }
 function generateBulkRows() {
 
@@ -591,6 +635,54 @@ function toggleInvoiceSelection(id, checked) {
   else
     selectedInvoices.delete(id);
 }
+
+function toggleLoadSelection(id, checked) {
+  if (checked) selectedLoad.add(id);
+  else selectedLoad.delete(id);
+  const btn = document.getElementById('bulk-load-btn');
+  if (btn) btn.textContent = `Mark Loaded (${selectedLoad.size})`;
+}
+
+function toggleSelectAllLoad(checked) {
+  const inYard = filterByClient(DB.filter(e => !e.deleted))
+    .filter(e => e.op === 'unload' && !e.loaded);
+  selectedLoad = checked ? new Set(inYard.map(e => e.id)) : new Set();
+  renderYard();
+}
+
+function openBulkLoadModal() {
+  if (!selectedLoad.size) return;
+  const todayStr = today();
+  const rows = [...selectedLoad].map(id => {
+    const e = DB.find(x => x.id === id);
+    if (!e) return '';
+    return `<div class="field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="flex:1;font-weight:600">${e.containerNo}</label>
+      <input type="date" class="bulk-load-date" data-id="${e.id}" value="${todayStr}">
+    </div>`;
+  }).join('');
+  document.getElementById('bulk-load-rows').innerHTML = rows;
+  document.getElementById('modal-bulk-load').classList.add('open');
+}
+
+async function saveBulkLoad() {
+  const inputs = document.querySelectorAll('.bulk-load-date');
+  let count = 0;
+  inputs.forEach(inp => {
+    const date = inp.value;
+    if (!date) return;
+    const e = DB.find(x => x.id === inp.dataset.id);
+    if (!e) return;
+    e.loaded = true;
+    e.loadDate = date;
+    count++;
+  });
+  selectedLoad.clear();
+  closeModal('modal-bulk-load');
+  render();
+  saveData();
+  alert(`Marked ${count} container(s) as loaded.`);
+}
 async function saveBulkEntries() {
 
   const clientId =
@@ -664,11 +756,9 @@ for (const [i, cnum] of lines.entries()) {
     added++;
   }
 
-  await saveData();
-await loadData();
   closeModal('modal-bulk');
-
   render();
+  saveData(); // fire-and-forget: local DB already has the new entries
 
  let msg =
    `Imported: ${added}\n\n`;
@@ -700,7 +790,7 @@ function populateClientDropdowns() {
   const gf = document.getElementById('global-client-filter');
   const prev = sel.value;
   const sorted = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
-  sel.innerHTML = '<option value="">� Select client �</option>';
+  sel.innerHTML = '<option value="">— Select client —</option>';
   gf.innerHTML = '<option value="">All clients</option>';
   sorted.forEach(c => {
     sel.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
@@ -827,11 +917,9 @@ DB.push({
 
 }
 
-await saveData();
-await loadData();
 closeModal('modal-add');
-
 render();
+saveData(); // fire-and-forget: local DB already has the new entry, no need to block the UI or re-fetch it
 }
 function openClientModal(id) {
 
@@ -900,14 +988,12 @@ CLIENTS.push({
 
 }
 
-await saveData();
-await loadData();
-
 closeModal('modal-client');
 
 populateClientDropdowns();
 
 render();
+saveData(); // fire-and-forget: local CLIENTS already has the change
 }
 
 async function deleteClient(id) {
@@ -931,11 +1017,9 @@ async function deleteClient(id) {
 
   c.deleted = true;
 
-  await saveData();
-
   populateClientDropdowns();
-
   render();
+  saveData();
 }
 
 function openInvModal(id) {
@@ -950,21 +1034,21 @@ function openInvModal(id) {
 async function saveInvoice() {
   const n = document.getElementById('inv-num').value.trim();
   if (!n) { alert('Enter invoice number.'); return; }
-  if (pendingInvEntry) { pendingInvEntry.invoiceNo = n; pendingInvEntry.invoiced = true; await saveData(); render(); }
+  if (pendingInvEntry) { pendingInvEntry.invoiceNo = n; pendingInvEntry.invoiced = true; render(); saveData(); }
   closeModal('modal-invoice'); pendingInvEntry = null;
 }
 
 async function unmarkInvoice(id) {
   const e = DB.find(x => x.id === id);
   if (e && confirm('Remove invoice mark from ' + e.containerNo + '?')) {
-    e.invoiced = false; e.invoiceNo = null; await saveData(); render();
+    e.invoiced = false; e.invoiceNo = null; render(); saveData();
   }
 }
 
 async function deleteEntry(id) {
   const e = DB.find(x => x.id === id);
   if (e && confirm('Delete entry for ' + e.containerNo + '?')) {
-    e.deleted = true; await saveData(); render();
+    e.deleted = true; render(); saveData();
   }
 }
 async function markLoaded(id) {
@@ -994,11 +1078,9 @@ async function saveLoadedDate() {
   e.loaded = true;
   e.loadDate = loadDate;
 
-  await saveData();
-
   closeModal('modal-load');
-
   render();
+  saveData();
 }
 function openEditDates(id) {
 
@@ -1049,11 +1131,9 @@ async function saveEditedDates() {
 
   e.loaded = !!loadDate;
 
-  await saveData();
-
   closeModal('modal-edit-dates');
-
   render();
+  saveData();
 }
 async function acquireLock(user) {
 
@@ -1148,7 +1228,7 @@ return `<tr class="${rowClass}">
       onchange="toggleInvoiceSelection('${e.id}', this.checked)">
   </td>
 
-  <td><strong>${e.containerNo}</strong></td>
+  <td><strong>${e.containerNo}</strong>${e.remarks ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(e.remarks)}</div>` : ''}</td>
   <td>${clientCell}</td>
   <td>${fmt(e.unloadDate)}</td>
   <td>${fmt(e.loadDate)}</td>
@@ -1185,7 +1265,8 @@ calcTotal(e).days;
 
 return `
 <tr>
-  <td><strong>${e.containerNo}</strong></td>
+  <td><input type="checkbox" ${selectedLoad.has(e.id) ? 'checked' : ''} onchange="toggleLoadSelection('${e.id}', this.checked)"></td>
+  <td><strong>${e.containerNo}</strong>${e.remarks ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(e.remarks)}</div>` : ''}</td>
   <td>${clientName}</td>
   <td>${fmt(e.unloadDate)}</td>
   <td style="text-align:center">${days}</td>
@@ -1217,13 +1298,14 @@ function tableWrap(rows, tfoot) {
    <th>Invoice</th>
   <th></th>
     </tr></thead>
-    <tbody>${rows || '<tr><td colspan="7" class="empty">No records found.</td></tr>'}</tbody>
+    <tbody>${rows || '<tr><td colspan="9" class="empty">No records found.</td></tr>'}</tbody>
     ${tfoot || ''}
   </table></div>`;
 }
 function yardTableWrap(rows) {
   return `<div class="overflow-x"><table>
     <thead><tr>
+      <th style="width:40px"><input type="checkbox" onchange="toggleSelectAllLoad(this.checked)"></th>
       <th>Container no.</th>
       <th>Client</th>
       <th>Gate In</th>
@@ -1233,7 +1315,7 @@ function yardTableWrap(rows) {
     </tr></thead>
     <tbody>${
       rows ||
-      '<tr><td colspan="6" class="empty">No records found.</td></tr>'
+      '<tr><td colspan="7" class="empty">No records found.</td></tr>'
     }</tbody>
   </table></div>`;
 }
@@ -1320,6 +1402,9 @@ e.op === 'unload' &&
 !e.loaded
 );
 
+const inYardIds = new Set(inYard.map(e => e.id));
+selectedLoad.forEach(id => { if (!inYardIds.has(id)) selectedLoad.delete(id); });
+
 let rows =
   inYard
     .map(e => yardRow(e))
@@ -1328,7 +1413,10 @@ let rows =
 const tfoot = '';
 
 document.getElementById('tab-yard').innerHTML =
-yardTableWrap(rows);
+  `<div class="filter-bar">
+    <button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button>
+  </div>` +
+  yardTableWrap(rows);
 
 if (!inYard.length) {
 document.getElementById('tab-yard').innerHTML =
@@ -1400,7 +1488,7 @@ data.sort((a, b) => {
 function renderInvoiced() {
   let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced)).sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
   const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
-  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="8" style="padding:7px 8px;font-size:11px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px;font-size:11px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>` : '';
   document.getElementById('tab-invoiced').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''), tfoot);
 }
 
@@ -1434,7 +1522,7 @@ const lastLoaded =
         <div style="flex:1;min-width:0">
           <div style="font-weight:500;font-size:14px">${c.name}${c.code ? ` <span style="font-size:11px;color:var(--text2)">(${c.code})</span>` : ''}</div>
           <div class="client-summary">
-            ${c.contact ? c.contact + ' � ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' � ' : ''}
+            ${c.contact ? c.contact + ' • ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' • ' : ''}
            <span style="color:#1D9E75">${inYard} in yard</span> •
 ${txAll.length} total tx •
 Last loaded:
@@ -1469,14 +1557,12 @@ function viewClient(id) {
 
 function renderRates() {
   document.getElementById('tab-rates').innerHTML = `
-    <div class="section-title">Storage rate tiers</div>
+    <div class="section-title">Storage rate</div>
     <table style="max-width:360px;margin-bottom:1.25rem">
       <thead><tr><th>Period</th><th>Rate per day</th></tr></thead>
       <tbody>
-        <tr><td>Day 1 � 3</td><td>RO 3.00</td></tr>
-        <tr><td>Day 4 � 5</td><td>RO 4.00</td></tr>
-        <tr><td>Day 6 � 7</td><td>RO 5.00</td></tr>
-        <tr><td>Day 8 onwards</td><td>RO 10.00</td></tr>
+        <tr><td>Every day in yard</td><td>RO ${STORAGE_RATE_PER_DAY.toFixed(2)}</td></tr>
+        <tr><td>Same-day gate in &amp; gate out</td><td>RO 0.00 (no storage charge)</td></tr>
       </tbody>
     </table>
     <div class="sep"></div>
@@ -1484,12 +1570,14 @@ function renderRates() {
     <table style="max-width:360px">
       <thead><tr><th>Operation</th><th>Charge</th></tr></thead>
       <tbody>
-        <tr><td>Unloading + loading</td><td>RO 17.00 per operation</td></tr>
-        <tr><td>Cross-loading</td><td>RO 20.00 per operation</td></tr>
+        <tr><td>Unloading</td><td>RO ${OP_UNLOAD.toFixed(2)} per operation</td></tr>
+        <tr><td>Loading</td><td>RO ${OP_UNLOAD.toFixed(2)} per operation</td></tr>
+        <tr><td>Unloading + loading (both)</td><td>RO ${(OP_UNLOAD * 2).toFixed(2)} total</td></tr>
+        <tr><td>Cross-loading</td><td>RO ${OP_CROSS.toFixed(2)} per operation</td></tr>
       </tbody>
     </table>
     <div class="sep"></div>
-    <div style="font-size:12px;color:var(--text2)">Storage accrues per calendar day from unload to load date (minimum 1 day). Containers still in yard accrue to today's date.</div>`;
+    <div style="font-size:12px;color:var(--text2)">Storage accrues per calendar day from unload to load date (minimum 1 day), except when a container is unloaded and loaded on the same day, which carries no storage charge. Containers still in yard accrue to today's date.</div>`;
 }
 
 function switchTab(tab, el) {
@@ -1563,11 +1651,9 @@ updated++;
 
   });
 
-  await saveData();
-
   selectedInvoices.clear();
-
   render();
+  saveData();
 
   alert(
     `Invoice Assigned
