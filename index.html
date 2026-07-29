@@ -543,7 +543,13 @@ async function saveData() {
   }
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-function today() { return new Date().toISOString().slice(0,10); }
+function today() {
+  // The yard's day is reported overnight and this system is updated the
+  // next morning, so "today" here is always yesterday's calendar date.
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0,10);
+}
 function escapeHtml(s) {
   if (!s) return '';
   return String(s)
@@ -566,7 +572,7 @@ function initials(name) { return name.split(' ').map(w => w[0]).join('').toUpper
 function calcStorage(a, b) {
   // Same-day gate in and gate out: no storage charge.
   if (a && b && a === b) return { days: 0, cost: 0 };
-  const da = new Date(a), db = b ? new Date(b) : new Date();
+  const da = new Date(a), db = b ? new Date(b) : new Date(today());
   const days = Math.max(1, Math.ceil((db - da) / 864e5));
   return { days, cost: days * STORAGE_RATE_PER_DAY };
 }
@@ -666,8 +672,9 @@ function toggleInvoiceSelection(id, checked) {
   else
     selectedInvoices.delete(id);
 
-  const btn = document.getElementById('mark-paid-btn');
-  if (btn) btn.textContent = `Mark Paid (${selectedInvoices.size})`;
+  document.querySelectorAll('.mark-paid-count-btn').forEach(btn => {
+    btn.textContent = `Mark Paid (${selectedInvoices.size})`;
+  });
 }
 
 function toggleLoadSelection(id, checked) {
@@ -1119,8 +1126,8 @@ function savePaidDate() {
 }
 
 function selectInvoiceGroup(invoiceNo) {
-  const ids = DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo === invoiceNo).map(e => e.id);
-  const allSelected = ids.every(id => selectedInvoices.has(id));
+  const ids = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo)).map(e => e.id);
+  const allSelected = ids.length > 0 && ids.every(id => selectedInvoices.has(id));
   ids.forEach(id => allSelected ? selectedInvoices.delete(id) : selectedInvoices.add(id));
   render();
 }
@@ -1136,7 +1143,7 @@ async function markLoaded(id) {
   currentLoadId = id;
 
   document.getElementById('load-date').value =
-    new Date().toISOString().slice(0,10);
+    today();
 
   document
     .getElementById('modal-load')
@@ -1308,6 +1315,7 @@ return `<tr class="${rowClass}">
   <td>
     <input
       type="checkbox"
+      ${selectedInvoices.has(e.id) ? 'checked' : ''}
       onchange="toggleInvoiceSelection('${e.id}', this.checked)">
   </td>
 
@@ -1530,6 +1538,11 @@ function renderAll() {
     Assign Invoice
 </button>
   <button
+    class="btn btn-primary mark-paid-count-btn"
+    onclick="bulkMarkPaid()">
+    Mark Paid (${selectedInvoices.size})
+</button>
+  <button
     class="btn btn-primary"
     onclick="exportBillingSheet()">
     Export Billing Sheet
@@ -1584,7 +1597,7 @@ data.sort((a, b) => {
 
 function renderInvoiced() {
   document.getElementById('tab-invoiced').innerHTML = `<div class="filter-bar">
-    <button id="mark-paid-btn" class="btn btn-primary" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button id="mark-paid-btn" class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
     <select id="f-paid" onchange="renderInvoicedTable()">
       <option value="">All</option>
       <option value="paid">Paid</option>
