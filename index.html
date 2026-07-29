@@ -372,7 +372,22 @@ table tbody tr:nth-child(even) {
   <div class="modal">
 
     <div class="modal-title">
-      Edit Container Dates
+      Edit Entry
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Container No.</label>
+      <input id="edit-cnum" type="text">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="edit-client"></select>
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Sales Ref</label>
+      <input id="edit-salesref" type="text">
     </div>
 
     <div class="field" style="margin-bottom:10px">
@@ -383,6 +398,11 @@ table tbody tr:nth-child(even) {
     <div class="field" style="margin-bottom:10px">
       <label>Load Date</label>
       <input id="edit-load-date" type="date">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Remarks</label>
+      <textarea id="edit-remarks" placeholder="Optional notes"></textarea>
     </div>
 
     <div class="modal-btns">
@@ -829,15 +849,20 @@ alert(msg);
 function populateClientDropdowns() {
   const sel = document.getElementById('f-client');
   const gf = document.getElementById('global-client-filter');
+  const ef = document.getElementById('edit-client');
   const prev = sel.value;
+  const prevEf = ef ? ef.value : '';
   const sorted = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
   sel.innerHTML = '<option value="">— Select client —</option>';
   gf.innerHTML = '<option value="">All clients</option>';
+  if (ef) ef.innerHTML = '<option value="">— Select client —</option>';
   sorted.forEach(c => {
     sel.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
     gf.innerHTML += `<option value="${c.id}"${globalClientFilter === c.id ? ' selected' : ''}>${c.name}</option>`;
+    if (ef) ef.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
   });
   if (prev) sel.value = prev;
+  if (ef && prevEf) ef.value = prevEf;
 }
 
 function applyClientFilter() {
@@ -1178,6 +1203,18 @@ function openEditDates(id) {
 
   currentEditId = id;
 
+  document.getElementById('edit-cnum').value =
+    e.containerNo || '';
+
+  document.getElementById('edit-client').value =
+    e.clientId || '';
+
+  document.getElementById('edit-salesref').value =
+    e.salesRef || '';
+
+  document.getElementById('edit-remarks').value =
+    e.remarks || '';
+
   document.getElementById('edit-unload-date').value =
     e.unloadDate || '';
 
@@ -1196,6 +1233,23 @@ async function saveEditedDates() {
 
   if (!e) return;
 
+  const containerNo =
+    document.getElementById('edit-cnum').value.trim();
+
+  if (!containerNo) {
+    alert('Container number is required.');
+    return;
+  }
+
+  const clientId =
+    document.getElementById('edit-client').value;
+
+  const salesRef =
+    document.getElementById('edit-salesref').value.trim();
+
+  const remarks =
+    document.getElementById('edit-remarks').value.trim();
+
   const unloadDate =
     document.getElementById('edit-unload-date').value;
 
@@ -1213,6 +1267,10 @@ async function saveEditedDates() {
     return;
   }
 
+  e.containerNo = containerNo;
+  e.clientId = clientId;
+  e.salesRef = salesRef;
+  e.remarks = remarks;
   e.unloadDate = unloadDate || '';
   e.loadDate = loadDate || '';
 
