@@ -529,6 +529,16 @@ table tbody tr:nth-child(even) {
 
 <script>
 
+// ── Detect client portal immediately on script parse, before anything else ──
+window._IS_CLIENT_PORTAL = !!(new URLSearchParams(window.location.search).get('client'));
+if (window._IS_CLIENT_PORTAL) {
+  // Hide loading screen lock possibility early
+  document.addEventListener('DOMContentLoaded', function() {
+    const ls = document.getElementById('lock-screen');
+    if (ls) ls.style.display = 'none'; // ensure never shown for clients
+  });
+}
+
 /*
 GOOGLE_APPS_SCRIPT_TEMPLATE
 
@@ -563,20 +573,23 @@ let selectedLoad = new Set();
 
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
 
-async function loadData() {
-  console.log('LOADDATA STARTED');
+async function loadData(skipLock) {
   try {
     const res = await fetch(GOOGLE_SCRIPT_URL);
     const data = await res.json();
-    console.log(data);
-DB = data.transactions || [];
-CLIENTS = data.clients || [];
-
-window.LOCK_INFO = data.lock || {};
+    DB = data.transactions || [];
+    CLIENTS = data.clients || [];
+    // Only populate lock info when NOT in client portal mode
+    if (!skipLock) {
+      window.LOCK_INFO = data.lock || {};
+    } else {
+      window.LOCK_INFO = {}; // client portal always sees no lock
+    }
   } catch(e) {
     console.error('Load error', e);
     DB = [];
     CLIENTS = [];
+    window.LOCK_INFO = {};
   }
 }
 
@@ -1949,8 +1962,7 @@ function applyUrlClientFilter() {
   }
 }
 function isClientPortal() {
-  return !!new URLSearchParams(window.location.search)
-    .get('client');
+  return window._IS_CLIENT_PORTAL || !!(new URLSearchParams(window.location.search).get('client'));
 }
 async function bulkInvoiceSelected() {
 
@@ -2484,6 +2496,7 @@ async function refreshLock() {
   }
 }
 function showLockScreen() {
+  if (isClientPortal()) return; // never show lock screen to clients
   const by = LOCK_INFO.lockedBy || 'Someone';
   const since = LOCK_INFO.lockedAt ? new Date(LOCK_INFO.lockedAt).toLocaleTimeString() : '';
   document.getElementById('lock-user-msg').textContent =
@@ -2501,16 +2514,36 @@ function hideLoading() {
   // ── Client portal: check URL FIRST before any network call ──
   if (isClientPortal()) {
     document.getElementById('loading-msg').textContent = 'Loading your containers…';
-    await loadData();
+    await loadData(true); // skipLock — client portal never participates in lock
     hideLoading();
     populateClientDropdowns();
     applyUrlClientFilter();
-    // Hide all admin elements
-    ['topbar-right','tab-btn-clients','tab-btn-rates',
-     'tab-btn-invoiced','tab-btn-pending','tab-btn-payments',
-     'tab-btn-unpaid','tab-btn-all'].forEach(id => {
+    // Hide admin-only tabs: Clients, Rates, Unpaid Invoices, global filter & buttons
+    ['topbar-right','tab-btn-clients','tab-btn-rates','tab-btn-unpaid'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
+    });
+    // Replace topbar with simple client header
+    const topbarLeft = document.querySelector('.topbar-left');
+    if (topbarLeft) {
+      const clientLabel = new URLSearchParams(window.location.search).get('client');
+      topbarLeft.innerHTML = `
+        <div>
+          <div style="font-size:16px;font-weight:500">📦 Yard Container Tracker</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Viewing as: <strong>${clientLabel}</strong></div>
+        </div>`;
+    }
+    // Rename tabs to be client-friendly
+    const tabLabels = {
+      'tab-btn-yard':     'In Yard',
+      'tab-btn-all':      'All Transactions',
+      'tab-btn-pending':  'Pending Invoice',
+      'tab-btn-invoiced': 'Invoiced',
+      'tab-btn-payments': 'Pending Payment'
+    };
+    Object.entries(tabLabels).forEach(([id, lbl]) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = lbl;
     });
     render();
     return;
