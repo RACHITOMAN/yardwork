@@ -1,0 +1,2585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yard Container Tracker</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #ffffff;
+  --bg2: #f5f5f4;
+  --bg3: #eeede9;
+  --text: #1a1a1a;
+  --text2: #6b6b6b;
+  --text3: #9b9b9b;
+  --border: rgba(0,0,0,0.12);
+  --border2: rgba(0,0,0,0.22);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --info-bg: #E6F1FB;
+  --info-text: #0C447C;
+  --success-bg: #E1F5EE;
+  --success-text: #085041;
+  --warn-bg: #FAEEDA;
+  --warn-text: #633806;
+  --danger-bg: #FCEBEB;
+  --danger-text: #A32D2D;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1c1c;
+    --bg2: #252525;
+    --bg3: #2e2e2e;
+    --text: #f0f0f0;
+    --text2: #a0a0a0;
+    --text3: #666;
+    --border: rgba(255,255,255,0.1);
+    --border2: rgba(255,255,255,0.2);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
+.topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.app-title { font-size: 16px; font-weight: 500; }
+.today-label { font-size: 12px; color: var(--text2); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+.stat { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; text-align: center; }
+.stat-num { font-size: 22px; font-weight: 500; margin-top: 3px; }
+.stat-label { font-size: 11px; color: var(--text2); }
+.tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 1.25rem; background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 0 0.5rem; overflow-x: auto; }
+.tab { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--text2); border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
+.tab.active { color: var(--text); border-bottom: 2px solid var(--text); font-weight: 500; }
+.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+.section-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+.field label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px 10px; font-size: 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); outline: none; }
+.field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
+.field textarea { height: 58px; resize: vertical; }
+.btn { padding: 7px 14px; font-size: 13px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); cursor: pointer; font-weight: 500; transition: background 0.1s; }
+.btn:hover { background: var(--bg2); }
+.btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+.btn-primary:hover { opacity: 0.85; }
+.btn-client{
+  background:#2563eb;
+  color:#fff;
+  border:none;
+}
+
+.btn-bulk{
+  background:#16a34a;
+  color:#fff;
+  border:none;
+}
+.btn-sm { padding: 3px 9px; font-size: 12px; }
+.btn-danger { border-color: #E24B4A; color: #A32D2D; }
+.btn-danger:hover { background: #FCEBEB; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left;
+  padding: 7px 8px;
+  font-weight: 700;
+  font-size: 14px;
+color: #000;
+  background: #e2e2e2;
+  border-bottom: 0.5px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+td { padding: 7px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+.tfoot-row td { font-weight: 500; background: var(--bg2); }
+.badge { display: inline-block; padding: 4px 10px; border-radius: var(--radius); font-size: 13px; font-weight: 600; }
+.badge-in { background: #E1F5EE; color: #085041; }
+.badge-out { background: #EAF3DE; color: #27500A; }
+.badge-cross { background: #EEEDFE; color: #3C3489; }
+.badge-warn { background: #FAEEDA; color: #633806; }
+.badge-inv { background: #E6F1FB; color: #0C447C; }
+.badge-paid { background: #E3F6E8; color: #1D7A3C; cursor: pointer; }
+.badge-unpaid { background: #FDECEC; color: #B3261E; cursor: pointer; }
+.row-warn { background: rgba(250,238,218,0.3); }
+.row-inyard { background: rgba(225,245,238,0.15); }
+table tbody tr:nth-child(even) {
+  background: #ebebeb;
+
+}
+.highlight-error { background: rgba(252,235,235,0.35); }
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+.filter-bar input, .filter-bar select { padding: 6px 10px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+.empty { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
+.sep { height: 0.5px; background: var(--border); margin: 1rem 0; }
+.op-row { display: flex; gap: 8px; margin-bottom: 1rem; }
+.op-btn { flex: 1; padding: 9px 4px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; text-align: center; font-size: 12px; background: var(--bg); color: var(--text2); }
+.op-btn.sel-unload { border-color: #1D9E75; background: #E1F5EE; color: #085041; font-weight: 500; }
+.op-btn.sel-load { border-color: #639922; background: #EAF3DE; color: #27500A; font-weight: 500; }
+.op-btn.sel-cross { border-color: #7F77DD; background: #EEEDFE; color: #3C3489; font-weight: 500; }
+.info-box { padding: 8px 10px; border-radius: var(--radius); font-size: 12px; margin-top: 8px; background: var(--bg2); color: var(--text2); }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: 460px; max-width: 96vw; max-height: 90vh; overflow-y: auto; }
+.modal-title { font-size: 16px; font-weight: 500; margin-bottom: 1rem; }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
+.client-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+.client-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+.client-row:last-child { border-bottom: none; }
+.client-summary { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.overflow-x { overflow-x: auto; }
+@media (max-width: 600px) {
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+  .grid2 { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr; }
+  .topbar { padding: 0 1rem; }
+  .container { padding: 1rem 0.5rem; }
+}
+
+/* ── Per-client detail panel ── */
+.client-detail-panel { border:0.5px solid var(--border); border-radius: var(--radius-lg); overflow:hidden; margin-top:1rem; background:var(--bg); }
+.cdp-header { display:flex; align-items:center; gap:12px; padding:1rem 1.25rem; border-bottom:0.5px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
+.cdp-tabs { display:flex; border-bottom:0.5px solid var(--border); padding:0 1rem; overflow-x:auto; background:var(--bg); }
+.cdp-tab { padding:8px 14px; cursor:pointer; font-size:12px; color:var(--text2); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; white-space:nowrap; }
+.cdp-tab.active { color:var(--text); border-bottom:2px solid var(--text); font-weight:500; }
+.cdp-body { padding:1rem 1.25rem; }
+.stat-clickable { cursor:pointer; transition:box-shadow 0.15s; }
+.stat-clickable:hover { box-shadow: 0 0 0 2px #2563eb44; }
+
+
+/* Lock screen */
+#lock-screen {
+  display:none; position:fixed; inset:0; background:var(--bg3);
+  z-index:999; align-items:center; justify-content:center; flex-direction:column;
+}
+#lock-screen.show { display:flex; }
+.lock-card {
+  background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg);
+  padding:2.5rem 2rem; max-width:420px; width:90%; text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,0.12);
+}
+.lock-icon { font-size:48px; margin-bottom:1rem; }
+.lock-title { font-size:20px; font-weight:600; margin-bottom:0.5rem; }
+.lock-user { font-size:14px; color:var(--text2); margin-bottom:1.5rem; line-height:1.5; }
+.lock-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.lock-time { font-size:12px; color:var(--text2); margin-top:1rem; }
+
+/* Client portal mode — applied to <body> when ?client= is in URL */
+body.client-portal #topbar-right { display: none !important; }
+body.client-portal #tab-btn-clients { display: none !important; }
+body.client-portal #tab-btn-rates { display: none !important; }
+body.client-portal #tab-btn-unpaid { display: none !important; }
+body.client-portal .global-client-filter { display: none !important; }
+body.client-portal #stats { display: none !important; }
+body.client-portal .btn-danger { pointer-events: none; opacity: 0.3; }
+body.client-portal .btn[onclick*="openEditDates"],
+body.client-portal .btn[onclick*="deleteEntry"],
+body.client-portal .btn[onclick*="markLoaded"],
+body.client-portal .btn[onclick*="openInvModal"],
+body.client-portal .btn[onclick*="bulkInvoice"],
+body.client-portal .btn[onclick*="unmarkInvoice"] { display: none !important; }
+
+</style>
+</head>
+<body>
+<script>
+// Apply client-portal class to body IMMEDIATELY — before any element renders
+if (new URLSearchParams(window.location.search).get('client')) {
+  document.body.classList.add('client-portal');
+}
+</script>
+
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">System In Use</div>
+    <div class="lock-user" id="lock-user-msg">Another user is currently using the system.</div>
+    <div class="lock-actions">
+      <button class="btn btn-primary" onclick="takeover()">Take Over</button>
+      <button class="btn" onclick="refreshLock()"><i class="ti ti-refresh"></i> Refresh</button>
+    </div>
+    <div class="lock-time" id="lock-time-msg"></div>
+  </div>
+</div>
+
+<div id="loading-screen" style="display:flex;position:fixed;inset:0;background:var(--bg3);z-index:998;align-items:center;justify-content:center;flex-direction:column;gap:12px">
+  <div style="font-size:32px">📦</div>
+  <div style="font-size:16px;font-weight:500">Yard Container Tracker</div>
+  <div style="font-size:13px;color:var(--text2)" id="loading-msg">Loading data…</div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div>
+      <div class="app-title"><i class="ti ti-container" aria-hidden="true"></i> Yard Container Tracker</div>
+      <div class="today-label" id="today-label"></div>
+    </div>
+  </div>
+<div class="topbar-right" id="topbar-right">
+    <span id="sync-status" style="font-size:12px;color:var(--text2);min-width:70px;text-align:right"></span>
+    <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      <option value="">All clients</option>
+    </select>
+ <button class="btn" onclick="syncNow()">
+  Sync
+</button>
+
+<button class="btn btn-client" onclick="openClientModal()">
+<i class="ti ti-user-plus"></i>
+  Add Client
+</button>
+
+<button class="btn btn-primary" onclick="openAddModal()">
+  <i class="ti ti-plus"></i>
+  New Entry
+</button>
+<button class="btn btn-bulk" onclick="openBulkModal()">
+<i class="ti ti-stack-2"></i>
+  Bulk Entry
+</button>
+<button class="btn" onclick="releaseAndExit()">
+  Release Lock
+</button>
+  </div>
+</div>
+
+
+<div class="container">
+  <div class="stats-grid" id="stats"></div>
+
+  <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div class="tabs" id="tabs">
+      <button id="tab-btn-yard"      class="tab active" onclick="switchTab('yard',this)">In Yard</button>
+<button id="tab-btn-all"       class="tab"        onclick="switchTab('all',this)">All Transactions</button>
+<button id="tab-btn-pending"   class="tab"        onclick="switchTab('pending',this)">Pending Invoice</button>
+<button id="tab-btn-invoiced"  class="tab"        onclick="switchTab('invoiced',this)">Invoiced</button>
+<button id="tab-btn-payments"  class="tab"        onclick="switchTab('payments',this)">Pending Payment</button>
+<button id="tab-btn-unpaid"    class="tab"        onclick="switchTab('unpaid',this)">Unpaid Invoices</button>
+<button id="tab-btn-clients"   class="tab"        onclick="switchTab('clients',this)">Clients</button>
+<button id="tab-btn-rates"     class="tab"        onclick="switchTab('rates',this)">Rate Sheet</button>
+    </div>
+    <div style="padding:1.25rem">
+      <div id="tab-yard"></div>
+      <div id="tab-all"      style="display:none"></div>
+      <div id="tab-pending"  style="display:none"></div>
+      <div id="tab-invoiced" style="display:none"></div>
+      <div id="tab-payments" style="display:none"></div>
+      <div id="tab-unpaid"   style="display:none"></div>
+      <div id="tab-clients"  style="display:none"></div>
+      <div id="tab-rates"    style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Entry Modal -->
+<div id="modal-add" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">New container entry</div>
+    <div class="op-row">
+      <button class="op-btn" id="btn-unload" onclick="setOp('unload')"><i class="ti ti-arrow-bar-to-down" aria-hidden="true"></i> Unloading</button>
+      <button class="op-btn" id="btn-cross" onclick="setOp('cross')"><i class="ti ti-arrows-exchange" aria-hidden="true"></i> Cross-loading</button>
+    </div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="field">
+        <label>Container no.</label>
+        <input id="f-cnum" placeholder="e.g. MSCU1234567" style="text-transform:uppercase">
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input id="f-date" type="date">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="f-client"><option value="">— Select client —</option></select>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+     <label>Sales Ref</label>
+<input id="f-salesref" placeholder="Sales person">
+    </div>
+    <div class="field">
+      <label>Remarks</label>
+      <textarea id="f-remarks" placeholder="Optional notes"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-add')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEntry()">Save entry</button>
+    </div>
+  </div>
+</div>
+<div id="modal-bulk" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Bulk Container Entry
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="bulk-client"></select>
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Sales Ref</label>
+      <input id="bulk-salesref" placeholder="Sales person">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Default Gate In Date</label>
+      <input id="bulk-date" type="date">
+    </div>
+
+   <div class="field">
+     <label>Container Numbers</label>
+     <textarea
+       id="bulk-list"
+       style="height:220px"
+       placeholder="REGU1235760&#10;REGU3228672&#10;TGBU8071201"></textarea>
+   </div>
+
+   <button
+     class="btn"
+     onclick="generateBulkRows()">
+     Generate
+   </button>
+
+   <div id="bulk-preview" style="margin-top:10px"></div>
+
+<div class="modal-btns">
+  <button
+    class="btn"
+    onclick="closeModal('modal-bulk')">
+    Cancel
+  </button>
+
+  <button
+    class="btn btn-primary"
+    onclick="saveBulkEntries()">
+    Save All
+  </button>
+</div>
+
+  </div>
+</div>
+<!-- Client Modal -->
+
+<div id="modal-client" class="modal-overlay">
+  <div class="modal">
+
+<div class="modal-title" id="client-modal-title">
+  Add Client
+</div>
+
+<div class="field" style="margin-bottom:10px">
+  <label>Client Name</label>
+  <input
+    id="cl-name"
+    placeholder="Company or person name">
+</div>
+
+<div class="modal-btns">
+  <button
+    class="btn"
+    onclick="closeModal('modal-client')">
+    Cancel
+  </button>
+
+  <button
+    class="btn btn-primary"
+    onclick="saveClient()">
+    Save Client
+  </button>
+</div>
+
+  </div>
+</div>
+
+<!-- Invoice Modal -->
+<div id="modal-invoice" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Mark as invoiced</div>
+    <div class="field">
+      <label>Invoice number</label>
+      <input id="inv-num" placeholder="e.g. INV-2024-001">
+    </div>
+    <div class="info-box" style="margin-top:8px" id="inv-desc"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-invoice')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveInvoice()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-load" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Mark Container Loaded
+    </div>
+
+    <div class="field">
+      <label>Load Date</label>
+      <input id="load-date" type="date">
+    </div>
+
+    <div class="modal-btns">
+      <button
+        class="btn"
+        onclick="closeModal('modal-load')">
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        onclick="saveLoadedDate()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<div id="modal-edit-dates" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Edit Entry
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Container No.</label>
+      <input id="edit-cnum" type="text">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Client</label>
+      <select id="edit-client"></select>
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Sales Ref</label>
+      <input id="edit-salesref" type="text">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Unload Date</label>
+      <input id="edit-unload-date" type="date">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Load Date</label>
+      <input id="edit-load-date" type="date">
+    </div>
+
+    <div class="field" style="margin-bottom:10px">
+      <label>Remarks</label>
+      <textarea id="edit-remarks" placeholder="Optional notes"></textarea>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn"
+              onclick="closeModal('modal-edit-dates')">
+        Cancel
+      </button>
+
+      <button class="btn btn-primary"
+              onclick="saveEditedDates()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<div id="modal-paid" class="modal-overlay">
+  <div class="modal">
+
+    <div class="modal-title">
+      Mark Invoice Paid
+    </div>
+
+    <div class="field">
+      <label>Payment Date</label>
+      <input id="paid-date" type="date">
+    </div>
+
+    <div class="modal-btns">
+      <button
+        class="btn"
+        onclick="closeModal('modal-paid')">
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        onclick="savePaidDate()">
+        Save
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<div id="modal-bulk-load" class="modal-overlay">
+  <div class="modal" style="max-width:480px">
+
+    <div class="modal-title">
+      Mark Containers Loaded
+    </div>
+
+    <div id="bulk-load-rows" style="max-height:320px;overflow-y:auto;margin-bottom:10px"></div>
+
+    <div class="modal-btns">
+      <button class="btn"
+              onclick="closeModal('modal-bulk-load')">
+        Cancel
+      </button>
+
+      <button class="btn btn-primary"
+              onclick="saveBulkLoad()">
+        Save all
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+// ── Detect client portal immediately on script parse, before anything else ──
+window._IS_CLIENT_PORTAL = !!(new URLSearchParams(window.location.search).get('client'));
+if (window._IS_CLIENT_PORTAL) {
+  // Apply CSS class to body immediately — hides all admin UI via CSS, survives re-renders
+  document.addEventListener('DOMContentLoaded', function() {
+    document.body.classList.add('client-portal');
+    const ls = document.getElementById('lock-screen');
+    if (ls) ls.style.display = 'none';
+  });
+  // Also try immediately in case DOM is already ready
+  if (document.body) document.body.classList.add('client-portal');
+}
+
+/*
+GOOGLE_APPS_SCRIPT_TEMPLATE
+
+Deploy a Web App and use this URL:
+https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec
+
+Expected JSON:
+GET -> {clients:[...], transactions:[...]}
+
+POST -> {
+  action:'saveAll',
+  clients:[...],
+  transactions:[...]
+}
+*/
+
+const STORAGE_RATE_PER_DAY = 3; // flat rate, RO per day
+const OP_UNLOAD = 15, OP_CROSS = 20; // unload+load together = RO 30
+const AV_BG = ['#E1F5EE','#EEEDFE','#E6F1FB','#FAEEDA','#FAECE7','#EAF3DE','#FBEAF0'];
+const AV_TX = ['#085041','#3C3489','#0C447C','#633806','#712B13','#27500A','#72243E'];
+
+let DB = [], CLIENTS = [];
+let currentOp = 'unload';
+let currentTab = 'yard';
+let globalClientFilter = '';
+let editingClientId = null;
+let pendingInvEntry = null;
+let currentLoadId = null;
+let currentEditId = null;
+let selectedInvoices = new Set();
+let selectedLoad = new Set();
+
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz3ss8baMQNMQyQoqdLsaGhjxDFUxfxpo-61lqAM4WMYQvDeRv9ifWIGkQGc0DK-ulG8Q/exec';
+
+async function loadData(skipLock) {
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL);
+    const data = await res.json();
+    DB = data.transactions || [];
+    CLIENTS = data.clients || [];
+    // Only populate lock info when NOT in client portal mode
+    if (!skipLock) {
+      window.LOCK_INFO = data.lock || {};
+    } else {
+      window.LOCK_INFO = {}; // client portal always sees no lock
+    }
+  } catch(e) {
+    console.error('Load error', e);
+    DB = [];
+    CLIENTS = [];
+    window.LOCK_INFO = {};
+  }
+}
+
+function setSyncStatus(state) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  if (state === 'saving') el.textContent = 'Saving…';
+  else if (state === 'saved') { el.textContent = 'Saved'; setTimeout(() => { if (el.textContent === 'Saved') el.textContent = ''; }, 1500); }
+  else if (state === 'error') el.textContent = 'Sync failed';
+  else el.textContent = '';
+}
+
+// Guard against wiping the sheet if loadData() never populated CLIENTS/DB
+// (e.g. first load failed). Adjust these floors if your real dataset is smaller.
+const MIN_CLIENTS_TO_SAVE = 20;
+const MIN_TRANSACTIONS_TO_SAVE = 100;
+
+async function saveData() {
+  if (CLIENTS.length < MIN_CLIENTS_TO_SAVE || DB.length < MIN_TRANSACTIONS_TO_SAVE) {
+    alert(`Save blocked.\n\nLoaded only ${CLIENTS.length} clients and ${DB.length} transactions.`);
+    return;
+  }
+  setSyncStatus('saving');
+  try {
+    await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify({
+        action: 'saveAll',
+        clients: CLIENTS,
+        transactions: DB
+      })
+    });
+    setSyncStatus('saved');
+  } catch (e) {
+    console.error('Save error', e);
+    setSyncStatus('error');
+  }
+}
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function today() {
+  // The yard's day is reported overnight and this system is updated the
+  // next morning, so "today" here is always yesterday's calendar date.
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0,10);
+}
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmt(d) {
+  if (!d) return '–';
+  return new Date(d).toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+}
+
+function clientById(id) { return CLIENTS.find(c => c.id === id) || null; }
+function clientName(id) { const c = clientById(id); return c ? c.name : '–'; }
+function avatarIdx(id) { const i = CLIENTS.findIndex(c => c.id === id); return i < 0 ? 0 : i % AV_BG.length; }
+function initials(name) { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
+
+function calcStorage(a, b) {
+  // Same-day gate in and gate out: no storage charge.
+  if (a && b && a === b) return { days: 0, cost: 0 };
+  const da = new Date(a), db = b ? new Date(b) : new Date(today());
+  const days = Math.max(1, Math.ceil((db - da) / 864e5));
+  return { days, cost: days * STORAGE_RATE_PER_DAY };
+}
+function generateBulkRows() {
+
+  const defaultDate =
+    document.getElementById('bulk-date').value;
+
+  const lines =
+    document.getElementById('bulk-list')
+      .value
+      .split('\n')
+      .map(x => x.trim().toUpperCase())
+      .filter(Boolean);
+
+  let html = `
+    <table style="width:100%">
+      <tr>
+        <th>Container</th>
+        <th>Date</th>
+      </tr>
+  `;
+
+  lines.forEach((cnum,i) => {
+
+    html += `
+      <tr>
+        <td>${cnum}</td>
+        <td>
+          <input
+            type="date"
+            id="bulk-row-date-${i}"
+            value="${defaultDate}">
+        </td>
+      </tr>
+    `;
+
+  });
+
+  html += '</table>';
+
+  document.getElementById('bulk-preview')
+    .innerHTML = html;
+}
+
+function calcTotal(e) {
+
+  if (e.op === 'cross') {
+    return {
+      days: 0,
+      storageCost: 0,
+      opCost: OP_CROSS,
+      total: OP_CROSS
+    };
+  }
+
+  const { days, cost } =
+    calcStorage(
+      e.unloadDate,
+      e.loadDate || null
+    );
+
+  let opCost = OP_UNLOAD;
+
+  if (e.loaded) {
+    opCost += OP_UNLOAD;
+  }
+
+  return {
+    days,
+    storageCost: cost,
+    opCost,
+    total: cost + opCost
+  };
+}
+function openBulkModal() {
+
+  document.getElementById('bulk-list').value = '';
+
+  document.getElementById('bulk-date').value = today();
+
+  document.getElementById('bulk-salesref').value = '';
+
+  document.getElementById('bulk-client').innerHTML =
+    document.getElementById('f-client').innerHTML;
+
+  document.getElementById('bulk-client').value =
+    globalClientFilter || '';
+
+  document.getElementById('modal-bulk')
+    .classList.add('open');
+}
+function toggleInvoiceSelection(id, checked) {
+
+  if (checked)
+    selectedInvoices.add(id);
+  else
+    selectedInvoices.delete(id);
+
+  document.querySelectorAll('.mark-paid-count-btn').forEach(btn => {
+    btn.textContent = `Mark Paid (${selectedInvoices.size})`;
+  });
+}
+
+function toggleLoadSelection(id, checked) {
+  if (checked) selectedLoad.add(id);
+  else selectedLoad.delete(id);
+  const btn = document.getElementById('bulk-load-btn');
+  if (btn) btn.textContent = `Mark Loaded (${selectedLoad.size})`;
+}
+
+function toggleSelectAllLoad(checked) {
+  const inYard = filterByClient(DB.filter(e => !e.deleted))
+    .filter(e => e.op === 'unload' && !e.loaded);
+  selectedLoad = checked ? new Set(inYard.map(e => e.id)) : new Set();
+  renderYard();
+}
+
+function openBulkLoadModal() {
+  if (!selectedLoad.size) return;
+  const todayStr = today();
+  const rows = [...selectedLoad].map(id => {
+    const e = DB.find(x => x.id === id);
+    if (!e) return '';
+    return `<div class="field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <label style="flex:1;font-weight:600">${e.containerNo}</label>
+      <input type="date" class="bulk-load-date" data-id="${e.id}" value="${todayStr}">
+    </div>`;
+  }).join('');
+  document.getElementById('bulk-load-rows').innerHTML = rows;
+  document.getElementById('modal-bulk-load').classList.add('open');
+}
+
+async function saveBulkLoad() {
+  const inputs = document.querySelectorAll('.bulk-load-date');
+  let count = 0;
+  inputs.forEach(inp => {
+    const date = inp.value;
+    if (!date) return;
+    const e = DB.find(x => x.id === inp.dataset.id);
+    if (!e) return;
+    e.loaded = true;
+    e.loadDate = date;
+    count++;
+  });
+  selectedLoad.clear();
+  closeModal('modal-bulk-load');
+  render();
+  saveData();
+  alert(`Marked ${count} container(s) as loaded.`);
+}
+async function saveBulkEntries() {
+
+  const clientId =
+    document.getElementById('bulk-client').value;
+
+  const salesRef =
+    document.getElementById('bulk-salesref')
+      .value.trim();
+
+  const lines =
+    document.getElementById('bulk-list')
+      .value
+      .split('\n')
+      .map(x => x.trim().toUpperCase())
+      .filter(Boolean);
+
+  if (!clientId) {
+    alert('Select a client.');
+    return;
+  }
+
+  let added = 0;
+const skippedExisting = [];
+const skippedRepeated = [];
+const seenInUpload = new Set();
+
+for (const [i, cnum] of lines.entries()) {
+
+  const date =
+    document.getElementById(
+      `bulk-row-date-${i}`
+    ).value;
+
+   if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum))
+     continue;
+
+   if (seenInUpload.has(cnum)) {
+     skippedRepeated.push(cnum);
+     continue;
+   }
+
+   seenInUpload.add(cnum);
+
+   const duplicate = DB.find(
+     e =>
+       !e.deleted &&
+       e.containerNo === cnum
+   );
+
+   if (duplicate) {
+     skippedExisting.push(cnum);
+     continue;
+}
+
+    DB.push({
+      id: uid(),
+      containerNo: cnum,
+      op: 'unload',
+      unloadDate: date,
+      loaded: false,
+      loadDate: '',
+      clientId,
+      salesRef,
+      remarks: '',
+      invoiceNo: '',
+      invoiced: false,
+      deleted: false,
+      createdAt: new Date().toISOString()
+    });
+
+    added++;
+  }
+
+  closeModal('modal-bulk');
+  render();
+  saveData(); // fire-and-forget: local DB already has the new entries
+
+ let msg =
+   `Imported: ${added}\n\n`;
+
+ msg +=
+   `Skipped Existing: ${skippedExisting.length}\n`;
+
+ if (skippedExisting.length) {
+   msg +=
+     '\nSkipped Existing:\n' +
+     skippedExisting.join('\n') +
+     '\n';
+ }
+
+ msg +=
+   `\nSkipped Repeated In Upload: ${skippedRepeated.length}\n`;
+
+ if (skippedRepeated.length) {
+   msg +=
+     '\nSkipped Repeated In Upload:\n' +
+     skippedRepeated.join('\n');
+ }
+
+alert(msg);
+}
+
+function populateClientDropdowns() {
+  const sel = document.getElementById('f-client');
+  const gf = document.getElementById('global-client-filter');
+  const ef = document.getElementById('edit-client');
+  const prev = sel.value;
+  const prevEf = ef ? ef.value : '';
+  const sorted = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
+  sel.innerHTML = '<option value="">— Select client —</option>';
+  gf.innerHTML = '<option value="">All clients</option>';
+  if (ef) ef.innerHTML = '<option value="">— Select client —</option>';
+  sorted.forEach(c => {
+    sel.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
+    gf.innerHTML += `<option value="${c.id}"${globalClientFilter === c.id ? ' selected' : ''}>${c.name}</option>`;
+    if (ef) ef.innerHTML += `<option value="${c.id}">${c.name}${c.code ? ' (' + c.code + ')' : ''}</option>`;
+  });
+  if (prev) sel.value = prev;
+  if (ef && prevEf) ef.value = prevEf;
+}
+
+function applyClientFilter() {
+  globalClientFilter = document.getElementById('global-client-filter').value;
+  render();
+}
+
+function openAddModal() {
+  document.getElementById('f-cnum').value = '';
+document.getElementById('f-salesref').value = '';
+document.getElementById('f-remarks').value = '';
+  document.getElementById('f-date').value = today();
+  document.getElementById('f-client').value = globalClientFilter || '';
+  setOp('unload');
+  document.getElementById('modal-add').classList.add('open');
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function setOp(op) {
+  currentOp = op;
+
+  ['unload','cross'].forEach(o => {
+    document.getElementById('btn-' + o).className =
+      'op-btn' + (o === op ? ' sel-' + o : '');
+  });
+}
+
+document.getElementById('f-cnum').addEventListener('input', function() {
+  this.value = this.value.toUpperCase();
+});
+
+async function saveEntry() {
+
+const cnum = document
+.getElementById('f-cnum')
+.value
+.toUpperCase()
+.trim();
+
+const date = document
+.getElementById('f-date')
+.value;
+
+const clientId = document
+.getElementById('f-client')
+.value;
+
+const salesRef = document
+.getElementById('f-salesref')
+.value
+.trim();
+
+const remarks = document
+.getElementById('f-remarks')
+.value
+.trim();
+
+if (!cnum || !date || !clientId) {
+alert('Container number, date and client are required.');
+return;
+}
+
+if (!/^[A-Z]{4}[0-9]{7}$/.test(cnum)) {
+alert('Container number must be 4 letters followed by 7 digits.');
+return;
+}
+
+if (currentOp === 'unload') {
+
+const duplicate = DB.find(
+  e =>
+    !e.deleted &&
+    e.op === 'unload' &&
+    !e.loaded &&
+    e.containerNo === cnum
+);
+
+if (duplicate) {
+  alert('This container is already in the yard.');
+  return;
+}
+
+DB.push({
+  id: uid(),
+  containerNo: cnum,
+  op: 'unload',
+  unloadDate: date,
+  loaded: false,
+  loadDate: '',
+  clientId: clientId,
+  salesRef: salesRef,
+  remarks: remarks,
+  invoiceNo: '',
+  invoiced: false,
+  deleted: false,
+  createdAt: new Date().toISOString()
+});
+
+
+} else {
+
+DB.push({
+  id: uid(),
+  containerNo: cnum,
+  op: 'cross',
+  unloadDate: date,
+  loaded: true,
+  loadDate: date,
+  clientId: clientId,
+  salesRef: salesRef,
+  remarks: remarks,
+  invoiceNo: '',
+  invoiced: false,
+  deleted: false,
+  createdAt: new Date().toISOString()
+});
+
+}
+
+closeModal('modal-add');
+render();
+saveData(); // fire-and-forget: local DB already has the new entry, no need to block the UI or re-fetch it
+}
+function openClientModal(id) {
+
+editingClientId = id || null;
+
+const titleEl =
+  document.getElementById('client-modal-title');
+
+if (titleEl) {
+  titleEl.textContent =
+    id
+      ? 'Edit Client'
+      : 'Add Client';
+}
+if (id) {
+
+const c =
+  clientById(id);
+
+document.getElementById(
+  'cl-name'
+).value =
+  c.name || '';
+
+} else {
+
+document.getElementById(
+  'cl-name'
+).value = '';
+
+}
+
+document
+.getElementById('modal-client')
+.classList
+.add('open');
+}
+async function saveClient() {
+
+const name =
+document
+.getElementById('cl-name')
+.value
+.trim();
+
+if (!name) {
+alert('Client name is required.');
+return;
+}
+
+if (editingClientId) {
+
+const c =
+  clientById(editingClientId);
+
+c.name = name;
+
+} else {
+
+CLIENTS.push({
+  id: uid(),
+  name: name,
+  deleted: false,
+  createdAt: today()
+});
+
+}
+
+closeModal('modal-client');
+
+populateClientDropdowns();
+
+render();
+saveData(); // fire-and-forget: local CLIENTS already has the change
+}
+
+async function deleteClient(id) {
+
+  const c = clientById(id);
+
+  if (!c) {
+    alert('Client not found.');
+    return;
+  }
+
+  const hasTx =
+    DB.filter(e => !e.deleted && e.clientId === id).length;
+
+  const msg =
+    hasTx
+      ? `${c.name} has ${hasTx} transaction(s). Delete client anyway?`
+      : `Delete client ${c.name}?`;
+
+  if (!confirm(msg)) return;
+
+  c.deleted = true;
+
+  populateClientDropdowns();
+  render();
+  saveData();
+}
+
+function openInvModal(id) {
+  pendingInvEntry = DB.find(e => e.id === id);
+  if (!pendingInvEntry) return;
+  document.getElementById('inv-num').value = pendingInvEntry.invoiceNo || '';
+  const { total } = calcTotal(pendingInvEntry);
+  document.getElementById('inv-desc').textContent = `Container: ${pendingInvEntry.containerNo} | Client: ${clientName(pendingInvEntry.clientId)} | Total: RO ${total.toFixed(2)}`;
+  document.getElementById('modal-invoice').classList.add('open');
+}
+
+async function saveInvoice() {
+  const n = document.getElementById('inv-num').value.trim();
+  if (!n) { alert('Enter invoice number.'); return; }
+  if (pendingInvEntry) { pendingInvEntry.invoiceNo = n; pendingInvEntry.invoiced = true; render(); saveData(); }
+  closeModal('modal-invoice'); pendingInvEntry = null;
+}
+
+async function unmarkInvoice(id) {
+  const e = DB.find(x => x.id === id);
+  if (e && confirm('Remove invoice mark from ' + e.containerNo + '?')) {
+    e.invoiced = false; e.invoiceNo = null; e.paidDate = ''; render(); saveData();
+  }
+}
+
+let currentPaidIds = [];
+
+function togglePaid(id) {
+  const e = DB.find(x => x.id === id);
+  if (!e) return;
+  if (e.paidDate) {
+    if (confirm(`Unmark ${e.containerNo} as paid?`)) {
+      e.paidDate = '';
+      render();
+      saveData();
+    }
+    return;
+  }
+  currentPaidIds = [id];
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+}
+
+function bulkMarkPaid() {
+  if (!selectedInvoices.size) return;
+  currentPaidIds = [...selectedInvoices];
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+}
+
+function savePaidDate() {
+  const date = document.getElementById('paid-date').value;
+  if (!date) return;
+  currentPaidIds.forEach(id => {
+    const e = DB.find(x => x.id === id);
+    if (e) e.paidDate = date;
+  });
+  currentPaidIds = [];
+  selectedInvoices.clear();
+  closeModal('modal-paid');
+  render();
+  saveData();
+}
+
+function selectInvoiceGroup(invoiceNo) {
+  const ids = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo)).map(e => e.id);
+  const allSelected = ids.length > 0 && ids.every(id => selectedInvoices.has(id));
+  ids.forEach(id => allSelected ? selectedInvoices.delete(id) : selectedInvoices.add(id));
+  render();
+}
+
+async function deleteEntry(id) {
+  const e = DB.find(x => x.id === id);
+  if (e && confirm('Delete entry for ' + e.containerNo + '?')) {
+    e.deleted = true; render(); saveData();
+  }
+}
+async function markLoaded(id) {
+
+  currentLoadId = id;
+
+  document.getElementById('load-date').value =
+    today();
+
+  document
+    .getElementById('modal-load')
+    .classList
+    .add('open');
+}
+async function saveLoadedDate() {
+
+  const loadDate =
+    document.getElementById('load-date').value;
+
+  if (!loadDate) return;
+
+  const e =
+    DB.find(x => x.id === currentLoadId);
+
+  if (!e) return;
+
+  e.loaded = true;
+  e.loadDate = loadDate;
+
+  closeModal('modal-load');
+  render();
+  saveData();
+}
+function openEditDates(id) {
+
+  const e =
+    DB.find(x => x.id === id);
+
+  if (!e) return;
+
+  currentEditId = id;
+
+  document.getElementById('edit-cnum').value =
+    e.containerNo || '';
+
+  document.getElementById('edit-client').value =
+    e.clientId || '';
+
+  document.getElementById('edit-salesref').value =
+    e.salesRef || '';
+
+  document.getElementById('edit-remarks').value =
+    e.remarks || '';
+
+  document.getElementById('edit-unload-date').value =
+    e.unloadDate || '';
+
+  document.getElementById('edit-load-date').value =
+    e.loadDate || '';
+
+  document
+    .getElementById('modal-edit-dates')
+    .classList
+    .add('open');
+}
+async function saveEditedDates() {
+
+  const e =
+    DB.find(x => x.id === currentEditId);
+
+  if (!e) return;
+
+  const containerNo =
+    document.getElementById('edit-cnum').value.trim();
+
+  if (!containerNo) {
+    alert('Container number is required.');
+    return;
+  }
+
+  const clientId =
+    document.getElementById('edit-client').value;
+
+  const salesRef =
+    document.getElementById('edit-salesref').value.trim();
+
+  const remarks =
+    document.getElementById('edit-remarks').value.trim();
+
+  const unloadDate =
+    document.getElementById('edit-unload-date').value;
+
+  const loadDate =
+    document.getElementById('edit-load-date').value;
+
+  if (
+    unloadDate &&
+    loadDate &&
+    loadDate < unloadDate
+  ) {
+    alert(
+      'Load date cannot be earlier than unload date.'
+    );
+    return;
+  }
+
+  e.containerNo = containerNo;
+  e.clientId = clientId;
+  e.salesRef = salesRef;
+  e.remarks = remarks;
+  e.unloadDate = unloadDate || '';
+  e.loadDate = loadDate || '';
+
+  e.loaded = !!loadDate;
+
+  closeModal('modal-edit-dates');
+  render();
+  saveData();
+}
+async function acquireLock(user) {
+
+  await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify({
+      action: 'acquireLock',
+      user
+    })
+  });
+
+}
+async function releaseLockClient() {
+
+  await fetch(GOOGLE_SCRIPT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain'
+    },
+    body: JSON.stringify({
+      action: 'releaseLock'
+    })
+  });
+  }
+  async function releaseAndExit() {
+
+  if (!confirm(
+    'Release system lock?'
+  )) return;
+
+  await releaseLockClient();
+
+  alert(
+    'Lock released.'
+  );
+
+  location.reload();
+
+}
+
+function filterByClient(data) {
+  return globalClientFilter ? data.filter(e => e.clientId === globalClientFilter) : data;
+}
+
+function entryRow(e) {
+  const inYard =
+    !e.deleted &&
+    e.op === 'unload' &&
+    !e.loaded;
+  const isCross = e.op === 'cross';
+  const r = calcTotal(e);
+  const storageCost = 'RO ' + r.storageCost.toFixed(2);
+  const opCost = 'RO ' + r.opCost.toFixed(2);
+  const total = 'RO ' + r.total.toFixed(2);
+const days = r.days;
+  const opBadge =
+    isCross
+      ? '<span class="badge badge-cross">Cross-load</span>'
+      : inYard
+        ? '<span class="badge badge-in">In yard</span>'
+      : '<span class="badge badge-out">Loaded</span>';
+ const rowClass =
+   inYard
+     ? 'row-inyard'
+    : '';
+  const ci = clientById(e.clientId);
+  const ai = avatarIdx(e.clientId);
+  const clientCell =
+  ci ? ci.name : '';
+  const invCell =
+    e.invoiced
+      ? `<span class="badge badge-inv" style="cursor:pointer" onclick="selectInvoiceGroup('${e.invoiceNo}')" title="Click to select all containers on this invoice">${e.invoiceNo}</span>
+         <span class="badge ${e.paidDate ? 'badge-paid' : 'badge-unpaid'}"
+           onclick="togglePaid('${e.id}')"
+           title="Click to ${e.paidDate ? 'unmark as paid' : 'mark as paid'}">${e.paidDate ? 'Paid ' + fmt(e.paidDate) : 'Unpaid'}</span>
+         <button class="btn btn-sm"
+           onclick="unmarkInvoice('${e.id}')"
+           title="Remove">✕</button>`
+      : (
+          e.loaded || isCross
+            ? `<button class="btn btn-sm"
+                 onclick="openInvModal('${e.id}')">
+                 Mark invoiced
+               </button>`
+            : '<span style="font-size:13px;font-weight:600">In yard</span>'
+      );
+
+return `<tr class="${rowClass}">
+  <td>
+    <input
+      type="checkbox"
+      ${selectedInvoices.has(e.id) ? 'checked' : ''}
+      onchange="toggleInvoiceSelection('${e.id}', this.checked)">
+  </td>
+
+  <td><strong>${e.containerNo}</strong>${e.remarks ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(e.remarks)}</div>` : ''}</td>
+  <td>${clientCell}</td>
+  <td>${fmt(e.unloadDate)}</td>
+  <td>${fmt(e.loadDate)}</td>
+  <td style="text-align:center">${days}</td>
+  <td>${opBadge}</td>
+  <td>${invCell}</td>
+  <td>
+    <button
+      class="btn btn-sm"
+      onclick="openEditDates('${e.id}')"
+      title="Edit Dates">
+      📅
+    </button>
+
+    <button
+      class="btn btn-sm btn-danger"
+      onclick="deleteEntry('${e.id}')"
+      title="Delete">
+      🗑
+    </button>
+</td>
+</tr>`;
+}
+function yardRow(e) {
+
+const ci =
+clientById(e.clientId);
+
+const clientName =
+ci ? ci.name : '';
+
+const days =
+calcTotal(e).days;
+
+return `
+<tr>
+  <td><input type="checkbox" ${selectedLoad.has(e.id) ? 'checked' : ''} onchange="toggleLoadSelection('${e.id}', this.checked)"></td>
+  <td><strong>${e.containerNo}</strong>${e.remarks ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${escapeHtml(e.remarks)}</div>` : ''}</td>
+  <td>${clientName}</td>
+  <td>${fmt(e.unloadDate)}</td>
+  <td style="text-align:center">${days}</td>
+  <td>
+    <span class="badge badge-in">
+      In Yard
+    </span>
+  </td>
+  <td>
+    <button
+      class="btn btn-sm"
+      onclick="markLoaded('${e.id}')">
+      Loaded
+    </button>
+  </td>
+</tr>`;
+}
+
+function tableWrap(rows, tfoot) {
+  return `<div class="overflow-x"><table>
+    <thead><tr>
+      <th style="width:40px"></th>
+<th>Container no.</th>
+      <th>Client</th>
+      <th>Gate In</th>
+  <th>Gate Out</th>
+<th style="text-align:center">Days</th>
+      <th>Status</th>
+   <th>Invoice</th>
+  <th></th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="9" class="empty">No records found.</td></tr>'}</tbody>
+    ${tfoot || ''}
+  </table></div>`;
+}
+function yardTableWrap(rows) {
+  return `<div class="overflow-x"><table>
+    <thead><tr>
+      <th style="width:40px"><input type="checkbox" onchange="toggleSelectAllLoad(this.checked)"></th>
+      <th>Container no.</th>
+      <th>Client</th>
+      <th>Gate In</th>
+      <th style="text-align:center">Days</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr></thead>
+    <tbody>${
+      rows ||
+      '<tr><td colspan="7" class="empty">No records found.</td></tr>'
+    }</tbody>
+  </table></div>`;
+}
+
+function renderStats() {
+  let data = DB.filter(e => !e.deleted);
+  if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
+  const inYard = data.filter(e => e.op === 'unload' && !e.loaded).length;
+  const pendingUnloadLoad = data.filter(e => e.op === 'unload' && e.loaded && !e.invoiced).length;
+  const pendingCross = data.filter(e => e.op === 'cross' && !e.invoiced).length;
+  const totalPending = pendingUnloadLoad + pendingCross;
+  const clientCount = CLIENTS.filter(c => !c.deleted).length;
+  const invoiceGroups = {};
+  data.filter(e => e.invoiced && e.invoiceNo).forEach(e => {
+    (invoiceGroups[e.invoiceNo] = invoiceGroups[e.invoiceNo] || []).push(e);
+  });
+  const unpaidInvoices = Object.values(invoiceGroups).filter(g => g.some(e => !e.paidDate)).length;
+  const unpaidAmt = data.filter(e => e.invoiced && !e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat stat-clickable" onclick="switchTab('yard', document.getElementById('tab-btn-yard'))" title="View In Yard">
+      <div class="stat-label">In Yard</div>
+      <div class="stat-num" style="color:#1D9E75">${inYard}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View Pending Invoice">
+      <div class="stat-label">Unload+Load Pending</div>
+      <div class="stat-num" style="color:#BA7517">${pendingUnloadLoad}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View Pending Invoice">
+      <div class="stat-label">Cross-Load Pending</div>
+      <div class="stat-num" style="color:#2563EB">${pendingCross}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View All Pending">
+      <div class="stat-label">Total Pending</div>
+      <div class="stat-num" style="color:#E24B4A">${totalPending}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('unpaid', document.getElementById('tab-btn-unpaid'))" title="View Unpaid Invoices">
+      <div class="stat-label">Unpaid Invoices</div>
+      <div class="stat-num" style="color:#B3261E">${unpaidInvoices}</div>
+      <div style="font-size:11px;color:#B3261E;margin-top:2px">RO ${unpaidAmt.toFixed(2)}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('clients', document.getElementById('tab-btn-clients'))" title="View Clients">
+      <div class="stat-label">Clients</div>
+      <div class="stat-num">${clientCount}</div>
+    </div>`;
+}
+
+
+function renderYard() {
+
+let data =
+filterByClient(
+DB.filter(e => !e.deleted)
+);
+
+const inYard =
+data.filter(
+e =>
+e.op === 'unload' &&
+!e.loaded
+);
+
+const inYardIds = new Set(inYard.map(e => e.id));
+selectedLoad.forEach(id => { if (!inYardIds.has(id)) selectedLoad.delete(id); });
+
+let rows =
+  inYard
+    .map(e => yardRow(e))
+    .join('');
+
+const tfoot = '';
+
+document.getElementById('tab-yard').innerHTML =
+  `<div class="filter-bar">
+    <button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button>
+  </div>` +
+  yardTableWrap(rows);
+
+if (!inYard.length) {
+document.getElementById('tab-yard').innerHTML =
+'No containers currently in yard.';
+}
+}
+
+function renderAll() {
+  const clientOpts = CLIENTS.filter(c => !c.deleted).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('tab-all').innerHTML = `<div class="filter-bar">
+  <button
+    class="btn btn-primary"
+    onclick="bulkInvoiceSelected()">
+    Assign Invoice
+</button>
+  <button
+    class="btn btn-primary mark-paid-count-btn"
+    onclick="bulkMarkPaid()">
+    Mark Paid (${selectedInvoices.size})
+</button>
+  <button
+    class="btn btn-primary"
+    onclick="exportBillingSheet()">
+    Export Billing Sheet
+</button>
+<button
+  class="btn btn-primary"
+  onclick="exportPendingInvoiceSummary()">
+  Pending Invoice Summary
+</button>
+    <input id="f-search" placeholder="Container / client" oninput="renderAllTable()" style="width:160px">
+    <select id="f-status" onchange="renderAllTable()"><option value="">All statuses</option><option value="inyard">In yard</option><option value="departed">Departed</option><option value="cross">Cross-load</option><option value="warn">Unmatched</option></select>
+    <select id="f-inv2" onchange="renderAllTable()"><option value="">All</option><option value="0">Not invoiced</option><option value="1">Invoiced</option></select>
+    <select id="f-cl2" onchange="renderAllTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="all-table"></div>`;
+  renderAllTable();
+}
+
+function renderAllTable() {
+  let data = DB.filter(e => !e.deleted);
+  if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
+  const search = (document.getElementById('f-search')?.value || '').toLowerCase();
+  const status = document.getElementById('f-status')?.value || '';
+  const inv = document.getElementById('f-inv2')?.value || '';
+  const cl = document.getElementById('f-cl2')?.value || '';
+  if (search) data = data.filter(e => e.containerNo.toLowerCase().includes(search) || (clientName(e.clientId)||'').toLowerCase().includes(search));
+  if (status === 'inyard') data = data.filter(e => e.op === 'unload' && !e.loadDate);
+  else if (status === 'departed') data = data.filter(e => e.op === 'unload' && e.loadDate);
+  else if (status === 'cross') data = data.filter(e => e.op === 'cross');
+  else if (status === 'warn') data = data.filter(e => e.op === 'load-unmatched');
+  if (inv === '0') data = data.filter(e => !e.invoiced);
+  if (inv === '1') data = data.filter(e => e.invoiced);
+  if (cl) data = data.filter(e => e.clientId === cl);
+data.sort((a, b) => {
+
+  const aInYard =
+    a.op === 'unload' &&
+    !a.loaded;
+
+  const bInYard =
+    b.op === 'unload' &&
+    !b.loaded;
+
+  if (aInYard && !bInYard) return -1;
+  if (!aInYard && bInYard) return 1;
+
+  return (a.unloadDate || '')
+    .localeCompare(b.unloadDate || '');
+
+});
+  document.getElementById('all-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''));
+}
+
+function renderInvoiced() {
+  document.getElementById('tab-invoiced').innerHTML = `<div class="filter-bar">
+    <button id="mark-paid-btn" class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <select id="f-paid" onchange="renderInvoicedTable()">
+      <option value="">All</option>
+      <option value="paid">Paid</option>
+      <option value="unpaid">Unpaid</option>
+    </select>
+  </div><div id="invoiced-table"></div>`;
+  renderInvoicedTable();
+}
+
+function renderInvoicedTable() {
+  const paidFilter = document.getElementById('f-paid') ? document.getElementById('f-paid').value : '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced));
+  if (paidFilter === 'paid') data = data.filter(e => e.paidDate);
+  if (paidFilter === 'unpaid') data = data.filter(e => !e.paidDate);
+  data.sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+  const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
+  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px;font-size:11px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>` : '';
+  document.getElementById('invoiced-table').innerHTML = tableWrap(data.map(e => entryRow(e)).join(''), tfoot);
+}
+
+function renderClients() {
+  const active = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
+  let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <div class="section-title" style="margin:0">Clients (${active.length})</div>
+    <button class="btn btn-primary btn-sm" onclick="openClientModal(null)"><i class="ti ti-plus"></i> Add client</button>
+  </div>`;
+  if (!active.length) {
+    html += '<div class="empty">No clients yet. Add your first client above.</div>';
+  } else {
+    active.forEach((c, i) => {
+      const ai = i % AV_BG.length;
+      const txAll = DB.filter(e => !e.deleted && e.clientId === c.id);
+      const inYard = txAll.filter(e => e.op === 'unload' && !e.loaded).length;
+      const totalBilled = txAll.filter(e => e.invoiced).reduce((s,e) => s + calcTotal(e).total, 0);
+      const pendingAmt = txAll.filter(e => !e.invoiced && (e.loaded || e.op==='cross')).reduce((s,e) => s + calcTotal(e).total, 0);
+      const unpaidAmt = txAll.filter(e => e.invoiced && !e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
+      const loadedTx = txAll.filter(e => e.loadDate).sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
+      const lastLoaded = loadedTx.length ? loadedTx[0].loadDate : '';
+      html += `<div class="client-row">
+        <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;font-size:14px">${c.name}</div>
+          <div class="client-summary">
+            <span style="color:#1D9E75">${inYard} in yard</span> &bull;
+            ${txAll.length} total tx &bull;
+            Last loaded: ${lastLoaded ? fmt(lastLoaded) : '–'} &bull;
+            RO ${totalBilled.toFixed(2)} billed &bull;
+            <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending invoice</span> &bull;
+            <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')"><i class="ti ti-file-spreadsheet"></i> In-Yard XLS</button>
+          <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')"><i class="ti ti-layout-list"></i> Detail</button>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.name}')" title="Copy portal link for this client"><i class="ti ti-link"></i> Client Link</button>
+          <button class="btn btn-sm" onclick="openClientModal('${c.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')"><i class="ti ti-trash"></i></button>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('tab-clients').innerHTML = html;
+  // Re-render detail panel if open
+  if (window._detailClientId) renderClientDetail(window._detailClientId, window._detailTab || 'inyard');
+}
+
+function openClientDetail(cid, tab) {
+  window._detailClientId = cid;
+  window._detailTab = tab || 'inyard';
+  // Make sure clients tab is active
+  if (currentTab !== 'clients') {
+    switchTab('clients', document.getElementById('tab-btn-clients'));
+    return;
+  }
+  renderClientDetail(cid, window._detailTab);
+}
+
+function setDetailTab(cid, tab) {
+  window._detailClientId = cid;
+  window._detailTab = tab;
+  renderClientDetail(cid, tab);
+}
+
+function closeClientDetail() {
+  window._detailClientId = null;
+  window._detailTab = null;
+  const p = document.getElementById('client-detail-panel');
+  if (p) p.remove();
+}
+
+function renderClientDetail(cid, tab) {
+  if (!cid) return;
+  tab = tab || 'inyard';
+  const c = clientById(cid); if (!c) return;
+  const ai = CLIENTS.filter(x=>!x.deleted).findIndex(x=>x.id===cid) % AV_BG.length;
+  const txAll = DB.filter(e => !e.deleted && e.clientId === cid);
+  const inYardRows = txAll.filter(e => e.op === 'unload' && !e.loaded);
+  const pendingRows = txAll.filter(e => !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded)));
+  const invoicedRows = txAll.filter(e => e.invoiced);
+  const unpaidInvGroups = {};
+  invoicedRows.filter(e => !e.paidDate && e.invoiceNo).forEach(e => { (unpaidInvGroups[e.invoiceNo] = unpaidInvGroups[e.invoiceNo] || []).push(e); });
+
+  const TABS = [
+    ['inyard', `In Yard (${inYardRows.length})`],
+    ['alltx', `All Transactions (${txAll.length})`],
+    ['pending', `Pending Invoice (${pendingRows.length})`],
+    ['invoiced', `Invoiced (${invoicedRows.length})`],
+    ['ppay', `Pending Payment (${Object.keys(unpaidInvGroups).length} invoices)`]
+  ];
+  const tabBtns = TABS.map(([id,lbl]) =>
+    `<button class="cdp-tab${tab===id?' active':''}" onclick="setDetailTab('${cid}','${id}')">${lbl}</button>`
+  ).join('');
+
+  let bodyHtml = '';
+
+  if (tab === 'inyard') {
+    const tS = inYardRows.reduce((s,e) => s + calcTotal(e).storageCost, 0);
+    const tT = inYardRows.reduce((s,e) => s + calcTotal(e).total, 0);
+    bodyHtml = `<div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    </div>` + (inYardRows.length ? yardTableWrap(inYardRows.map(e=>yardRow(e)).join('')) +
+      `<div style="text-align:right;font-size:12px;color:var(--text2);margin-top:6px">Accrued storage: <strong>RO ${tS.toFixed(2)}</strong> &nbsp;|&nbsp; Total accrued: <strong>RO ${tT.toFixed(2)}</strong></div>` :
+      '<div class="empty">No containers in yard for this client.</div>');
+  }
+  else if (tab === 'alltx') {
+    const sorted = [...txAll].sort((a,b) => (b.unloadDate||b.loadDate||'').localeCompare(a.unloadDate||a.loadDate||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+    </div>` + tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot);
+  }
+  else if (tab === 'pending') {
+    const sorted = [...pendingRows].sort((a,b) => (a.unloadDate||'').localeCompare(b.unloadDate||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Pending total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientBillingExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Billing Excel</button>
+    </div>` + (sorted.length ? tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot) : '<div class="empty">No containers pending invoice.</div>');
+  }
+  else if (tab === 'invoiced') {
+    const sorted = [...invoicedRows].sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px">
+      <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    </div>` + (sorted.length ? tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot) : '<div class="empty">No invoiced containers.</div>');
+  }
+  else if (tab === 'ppay') {
+    const groupArr = Object.entries(unpaidInvGroups).map(([inv, entries]) => ({
+      inv, entries, total: entries.reduce((s,e) => s + calcTotal(e).total, 0)
+    })).sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+    const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+    const rows = groupArr.map(g => `<tr>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="markInvoicePaidFromDetail('${g.inv}','${cid}')" title="Click to mark paid">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`).join('');
+    const tfoot = groupArr.length ? `<tfoot><tr class="tfoot-row"><td colspan="2">Unpaid total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientPendingPaymentExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    </div>
+    <div class="overflow-x"><table>
+      <thead><tr><th>Invoice No.</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="empty">No unpaid invoices.</td></tr>'}</tbody>
+      ${tfoot}
+    </table></div>`;
+  }
+
+  const totalBilled = invoicedRows.reduce((s,e) => s + calcTotal(e).total, 0);
+  const unpaidAmt = invoicedRows.filter(e=>!e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
+
+  let panel = document.getElementById('client-detail-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'client-detail-panel';
+    panel.className = 'client-detail-panel';
+    document.getElementById('tab-clients').appendChild(panel);
+  }
+  panel.innerHTML = `
+    <div class="cdp-header">
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};width:40px;height:40px;font-size:14px">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:15px">${escapeHtml(c.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">
+          <span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
+          <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
+          RO ${totalBilled.toFixed(2)} billed &bull;
+          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
+          ${txAll.length} total transactions
+        </div>
+      </div>
+      <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
+    </div>
+    <div class="cdp-tabs">${tabBtns}</div>
+    <div class="cdp-body">${bodyHtml}</div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function markInvoicePaidFromDetail(invoiceNo, cid) {
+  const entries = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo));
+  currentPaidIds = entries.map(e => e.id);
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+  // After save, re-render detail
+  window._afterPaid = () => renderClientDetail(cid, 'ppay');
+}
+
+function viewClient(id) {
+  openClientDetail(id, 'inyard');
+}
+
+function renderRates() {
+  document.getElementById('tab-rates').innerHTML = `
+    <div class="section-title">Storage rate</div>
+    <table style="max-width:360px;margin-bottom:1.25rem">
+      <thead><tr><th>Period</th><th>Rate per day</th></tr></thead>
+      <tbody>
+        <tr><td>Every day in yard</td><td>RO ${STORAGE_RATE_PER_DAY.toFixed(2)}</td></tr>
+        <tr><td>Same-day gate in &amp; gate out</td><td>RO 0.00 (no storage charge)</td></tr>
+      </tbody>
+    </table>
+    <div class="sep"></div>
+    <div class="section-title">Operation charges</div>
+    <table style="max-width:360px">
+      <thead><tr><th>Operation</th><th>Charge</th></tr></thead>
+      <tbody>
+        <tr><td>Unloading</td><td>RO ${OP_UNLOAD.toFixed(2)} per operation</td></tr>
+        <tr><td>Loading</td><td>RO ${OP_UNLOAD.toFixed(2)} per operation</td></tr>
+        <tr><td>Unloading + loading (both)</td><td>RO ${(OP_UNLOAD * 2).toFixed(2)} total</td></tr>
+        <tr><td>Cross-loading</td><td>RO ${OP_CROSS.toFixed(2)} per operation</td></tr>
+      </tbody>
+    </table>
+    <div class="sep"></div>
+    <div style="font-size:12px;color:var(--text2)">Storage accrues per calendar day from unload to load date (minimum 1 day), except when a container is unloaded and loaded on the same day, which carries no storage charge. Containers still in yard accrue to today's date.</div>`;
+}
+
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['yard','all','pending','invoiced','payments','unpaid','clients','rates'].forEach(t => {
+    const el2 = document.getElementById('tab-' + t);
+    if (el2) el2.style.display = t === tab ? 'block' : 'none';
+  });
+  render();
+}
+function applyUrlClientFilter() {
+
+  const clientName =
+    new URLSearchParams(window.location.search)
+      .get('client');
+
+  if (!clientName) return;
+
+  const client =
+    CLIENTS.find(
+      c =>
+        !c.deleted &&
+        c.name.toUpperCase() === clientName.toUpperCase()
+    );
+
+  if (!client) return;
+
+  globalClientFilter = client.id;
+
+  const filter =
+    document.getElementById('global-client-filter');
+
+  if (filter) {
+    filter.value = client.id;
+  }
+}
+function isClientPortal() {
+  return window._IS_CLIENT_PORTAL || !!(new URLSearchParams(window.location.search).get('client'));
+}
+async function bulkInvoiceSelected() {
+
+  if (!selectedInvoices.size) {
+    alert('Select at least one container.');
+    return;
+  }
+
+  const invoiceNo =
+    prompt('Enter invoice number');
+
+  if (!invoiceNo) return;
+
+  let updated = 0;
+  let skipped = 0;
+
+  DB.forEach(e => {
+
+if (!selectedInvoices.has(e.id))
+  return;
+
+if (e.invoiced) {
+  skipped++;
+  return;
+}
+
+e.invoiceNo = invoiceNo;
+e.invoiced = true;
+
+updated++;
+
+  });
+
+  selectedInvoices.clear();
+  render();
+  saveData();
+
+  alert(
+    `Invoice Assigned
+
+  Updated: ${updated}
+  Skipped Already Invoiced: ${skipped}`
+);
+}
+
+async function syncNow() {
+  await loadData();
+  populateClientDropdowns();
+  render();
+  alert('Data synchronized');
+}
+function exportBillingSheet() {
+
+  let data =
+    DB.filter(e =>
+      !e.deleted &&
+      !e.invoiced &&
+      (
+        e.loaded ||
+        e.op === 'cross'
+      )
+    );
+
+  if (globalClientFilter) {
+    data =
+      data.filter(
+        e => e.clientId === globalClientFilter
+      );
+  }
+  const unloadLoad =
+    data.filter(
+      e => e.op === 'unload'
+    );
+
+  const crossLoads =
+    data.filter(
+      e => e.op === 'cross'
+    );
+
+  data = [
+    ...unloadLoad,
+    ...crossLoads
+];
+
+  if (!data.length) {
+    alert(
+      'No ready-to-invoice containers found.'
+    );
+    return;
+  }
+
+  const client =
+    globalClientFilter
+      ? clientName(globalClientFilter)
+      : 'All Clients';
+
+ const rows = [];
+
+  let totalStorage = 0;
+  let totalHandling = 0;
+  let grandTotal = 0;
+
+  data.forEach(e => {
+
+    const r = calcTotal(e);
+
+    totalStorage += r.storageCost;
+    totalHandling += r.opCost;
+    grandTotal += r.total;
+
+rows.push({
+  'Container No': e.containerNo,
+  'Gate In': fmt(e.unloadDate),
+  'Gate Out': fmt(e.loadDate),
+  'Days': r.days,
+  'Storage Charges': r.storageCost.toFixed(3),
+  'Load Off / Load On': r.opCost.toFixed(3),
+  'Total Charges': r.total.toFixed(3),
+  'Remarks': e.op === 'cross'
+    ? 'Cross Load'
+    : ''
+});
+});
+
+  rows.push({});
+
+  rows.push({
+    'Container No': 'TOTAL',
+    'Storage Charges': totalStorage.toFixed(3),
+    'Load Off / Load On': totalHandling.toFixed(3),
+    'Total Charges': grandTotal.toFixed(3)
+});
+
+  const ws =
+    XLSX.utils.json_to_sheet(rows);
+
+ ws['!cols'] = [
+   { wch: 18 },
+   { wch: 15 },
+   { wch: 15 },
+   { wch: 10 },
+   { wch: 18 },
+   { wch: 20 },
+   { wch: 18 }
+];
+
+  const wb =
+    XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    'Billing'
+  );
+
+
+  const filename =
+    `${client}_Billing_${today()}.xlsx`;
+
+  XLSX.writeFile(
+    wb,
+    filename
+  );
+
+}
+function exportPendingInvoiceSummary() {
+
+  const summary = {};
+
+  DB.forEach(e => {
+
+    if (
+      e.deleted ||
+      e.invoiced
+    ) return;
+
+    const isUnloadLoad =
+      e.op === 'unload' &&
+      e.loaded;
+
+    const isCross =
+      e.op === 'cross';
+
+    if (!isUnloadLoad && !isCross)
+      return;
+
+    const client =
+      clientName(e.clientId) || 'Unknown';
+
+    if (!summary[client]) {
+      summary[client] = {
+        unloadLoad: 0,
+        cross: 0
+      };
+    }
+
+    if (isUnloadLoad)
+      summary[client].unloadLoad++;
+
+    if (isCross)
+      summary[client].cross++;
+
+  });
+
+  const rows = [];
+
+  Object.keys(summary)
+    .sort()
+    .forEach(client => {
+
+      const u =
+        summary[client].unloadLoad;
+
+      const c =
+        summary[client].cross;
+
+      rows.push({
+        'Client': client,
+        'Unload + Load Pending': u,
+        'Cross Load Pending': c,
+        'Total Pending': u + c
+      });
+
+    });
+
+  if (!rows.length) {
+    alert('No pending invoices.');
+    return;
+  }
+
+  const ws =
+    XLSX.utils.json_to_sheet(rows);
+
+  ws['!cols'] = [
+    { wch: 35 },
+    { wch: 20 },
+    { wch: 20 },
+    { wch: 15 }
+  ];
+
+  const wb =
+    XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    'Pending Summary'
+  );
+
+  XLSX.writeFile(
+    wb,
+    `Pending_Invoice_Summary_${today()}.xlsx`
+  );
+
+}
+
+/* ── Pending Invoice tab ── */
+function renderPending() {
+  let data = filterByClient(DB.filter(e => !e.deleted && !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded))));
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-pending').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportBillingSheet()"><i class="ti ti-file-spreadsheet"></i> Export Billing Excel</button>
+    <select id="f-pend-cl" onchange="renderPendingFiltered()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="pending-table"></div>`;
+  renderPendingFiltered();
+}
+function renderPendingFiltered() {
+  const cl = document.getElementById('f-pend-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded))));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  data.sort((a,b) => (a.unloadDate||'').localeCompare(b.unloadDate||''));
+  const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
+  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Pending total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+  document.getElementById('pending-table').innerHTML = tableWrap(data.map(e=>entryRow(e)).join(''), tfoot);
+}
+
+/* ── Pending Payment tab ── */
+function renderPayments() {
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo));
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-payments').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()"><i class="ti ti-file-spreadsheet"></i> Export Pending Payment Excel</button>
+    <select id="f-pay-status" onchange="renderPaymentsTable()"><option value="">All</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select>
+    <select id="f-pay-cl" onchange="renderPaymentsTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="payments-table"></div>`;
+  renderPaymentsTable();
+}
+function renderPaymentsTable() {
+  const pf = document.getElementById('f-pay-status')?.value || '';
+  const cl = document.getElementById('f-pay-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  let groupArr = Object.entries(groups).map(([inv, entries]) => {
+    const isPaid = entries.every(e => e.paidDate);
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    const paidDate = isPaid ? entries.map(e=>e.paidDate).sort().pop() : '';
+    return { inv, entries, isPaid, total, paidDate, cId: entries[0].clientId };
+  });
+  if (pf === 'paid') groupArr = groupArr.filter(g => g.isPaid);
+  if (pf === 'unpaid') groupArr = groupArr.filter(g => !g.isPaid);
+  groupArr.sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+  const unpaidTotal = groupArr.filter(g=>!g.isPaid).reduce((s,g) => s + g.total, 0);
+  const rows = groupArr.map(g => {
+    const allSel = g.entries.length > 0 && g.entries.every(e => selectedInvoices.has(e.id));
+    return `<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${g.inv}',this.checked)"></td>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td>${escapeHtml(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge ${g.isPaid?'badge-paid':'badge-unpaid'}" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${g.inv}')">${g.isPaid?'Paid '+fmt(g.paidDate):'Unpaid — click to mark paid'}</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot = groupArr.length ? `<tfoot>
+    <tr class="tfoot-row"><td colspan="4">Grand total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr>
+    <tr class="tfoot-row" style="color:#B3261E"><td colspan="4">Unpaid total</td><td>RO ${unpaidTotal.toFixed(2)}</td><td colspan="2"></td></tr>
+  </tfoot>` : '';
+  document.getElementById('payments-table').innerHTML = `<div class="overflow-x"><table>
+    <thead><tr><th style="width:36px"></th><th>Invoice No.</th><th>Client</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="empty">No invoices found.</td></tr>'}</tbody>
+    ${tfoot}
+  </table></div>`;
+}
+function toggleGroupSelect(invoiceNo, checked) {
+  const ids = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo)).map(e=>e.id);
+  ids.forEach(id => checked ? selectedInvoices.add(id) : selectedInvoices.delete(id));
+  document.querySelectorAll('.mark-paid-count-btn').forEach(b => b.textContent = `Mark Paid (${selectedInvoices.size})`);
+}
+function bulkToggleInvoicePaid(invoiceNo) {
+  const entries = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo));
+  const allPaid = entries.every(e => e.paidDate);
+  if (allPaid) {
+    if (confirm(`Unmark invoice ${invoiceNo} as paid?`)) { entries.forEach(e => e.paidDate = ''); render(); saveData(); }
+  } else {
+    currentPaidIds = entries.map(e => e.id);
+    document.getElementById('paid-date').value = today();
+    document.getElementById('modal-paid').classList.add('open');
+  }
+}
+
+/* ── Unpaid Invoices tab ── */
+function renderUnpaid() {
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-unpaid').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    <select id="f-unpaid-cl" onchange="renderUnpaidTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="unpaid-table"></div>`;
+  renderUnpaidTable();
+}
+function renderUnpaidTable() {
+  const cl = document.getElementById('f-unpaid-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && !e.paidDate));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const groupArr = Object.entries(groups).map(([inv, entries]) => ({
+    inv, entries, total: entries.reduce((s,e) => s + calcTotal(e).total, 0), cId: entries[0].clientId
+  })).sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+  const rows = groupArr.map(g => {
+    const allSel = g.entries.every(e => selectedInvoices.has(e.id));
+    return `<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${g.inv}',this.checked)"></td>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td>${escapeHtml(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${g.inv}')" title="Click to mark paid">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot = groupArr.length ? `<tfoot><tr class="tfoot-row"><td colspan="4">Total unpaid</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+  document.getElementById('unpaid-table').innerHTML = `<div class="overflow-x"><table>
+    <thead><tr>
+      <th style="width:36px"></th><th>Invoice No.</th><th>Client</th>
+      <th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="empty">No unpaid invoices.</td></tr>'}</tbody>
+    ${tfoot}
+  </table></div>`;
+}
+
+/* ── Excel exports ── */
+function fmtXl(d) { return d ? fmt(d) : ''; }
+
+function exportClientInYardExcel(cid) {
+  const c = clientById(cid);
+  const label = c ? c.name : 'All Clients';
+  let data = DB.filter(e => !e.deleted && e.op === 'unload' && !e.loaded);
+  if (cid) data = data.filter(e => e.clientId === cid);
+  if (!data.length) { alert('No containers in yard.'); return; }
+  let tS=0, tT=0;
+  const rows = data.map(e => {
+    const r = calcTotal(e);
+    tS += r.storageCost; tT += r.total;
+    return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Storage Accrued (RO)': parseFloat(r.storageCost.toFixed(2)), 'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)), 'Total Accrued (RO)': parseFloat(r.total.toFixed(2)), 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
+  });
+  rows.push({});
+  rows.push({ 'Container No':'TOTAL', 'Storage Accrued (RO)': parseFloat(tS.toFixed(2)), 'Total Accrued (RO)': parseFloat(tT.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'In Yard');
+  XLSX.writeFile(wb, `${label}_InYard_${today()}.xlsx`);
+}
+
+function exportBillingSheet(cid) {
+  let data = DB.filter(e => !e.deleted && !e.invoiced && (e.loaded || e.op === 'cross'));
+  const cidToUse = cid || globalClientFilter;
+  if (cidToUse) data = data.filter(e => e.clientId === cidToUse);
+  if (!data.length) { alert('No ready-to-invoice containers found.'); return; }
+  const label = cidToUse ? clientName(cidToUse) : 'All Clients';
+  let tS=0,tOp=0,tTotal=0;
+  const rows = data.map(e => {
+    const r = calcTotal(e);
+    tS+=r.storageCost; tOp+=r.opCost; tTotal+=r.total;
+    return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Gate Out': fmtXl(e.loadDate), 'Days': r.days, 'Storage Charges (RO)': parseFloat(r.storageCost.toFixed(3)), 'Load Off/On (RO)': parseFloat(r.opCost.toFixed(3)), 'Total Charges (RO)': parseFloat(r.total.toFixed(3)), 'Remarks': e.op==='cross'?'Cross Load':(e.remarks||'') };
+  });
+  rows.push({});
+  rows.push({ 'Container No':'TOTAL', 'Storage Charges (RO)': parseFloat(tS.toFixed(3)), 'Load Off/On (RO)': parseFloat(tOp.toFixed(3)), 'Total Charges (RO)': parseFloat(tTotal.toFixed(3)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:22},{wch:18},{wch:20},{wch:20}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Billing');
+  XLSX.writeFile(wb, `${label}_Billing_${today()}.xlsx`);
+}
+
+function exportClientBillingExcel(cid) { exportBillingSheet(cid); }
+
+function exportPendingPaymentExcel() {
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && !e.paidDate));
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const rows = Object.entries(groups).map(([inv, entries]) => {
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    return { 'Invoice No': inv, 'Client': clientName(entries[0].clientId), 'Containers': entries.length, 'Container Nos': entries.map(e=>e.containerNo).join(', '), 'Amount (RO)': parseFloat(total.toFixed(2)), 'Status': 'Unpaid' };
+  }).sort((a,b) => String(b['Invoice No']).localeCompare(String(a['Invoice No'])));
+  if (!rows.length) { alert('No unpaid invoices.'); return; }
+  const grand = rows.reduce((s,r) => s + r['Amount (RO)'], 0);
+  rows.push({}); rows.push({ 'Invoice No':'TOTAL', 'Amount (RO)': parseFloat(grand.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:28},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pending Payments');
+  XLSX.writeFile(wb, `Pending_Payment_Summary_${today()}.xlsx`);
+}
+
+function exportClientPendingPaymentExcel(cid) {
+  const c = clientById(cid);
+  const data = DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && e.clientId === cid && !e.paidDate);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const rows = Object.entries(groups).map(([inv, entries]) => {
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    return { 'Invoice No': inv, 'Containers': entries.length, 'Container Nos': entries.map(e=>e.containerNo).join(', '), 'Amount (RO)': parseFloat(total.toFixed(2)), 'Status': 'Unpaid' };
+  });
+  if (!rows.length) { alert('No unpaid invoices for this client.'); return; }
+  const grand = rows.reduce((s,r) => s + r['Amount (RO)'], 0);
+  rows.push({}); rows.push({ 'Invoice No':'TOTAL', 'Amount (RO)': parseFloat(grand.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pending Payment');
+  XLSX.writeFile(wb, `${c?c.name:'Client'}_PendingPayment_${today()}.xlsx`);
+}
+
+/* patch savePaidDate to call _afterPaid hook */
+const _origSavePaidDate = savePaidDate;
+function savePaidDate() {
+  const date = document.getElementById('paid-date').value; if (!date) return;
+  currentPaidIds.forEach(id => { const e = DB.find(x => x.id === id); if (e) e.paidDate = date; });
+  currentPaidIds = []; selectedInvoices.clear(); closeModal('modal-paid'); render(); saveData();
+  if (window._afterPaid) { window._afterPaid(); window._afterPaid = null; }
+}
+
+
+function copyClientLink(clientName) {
+  const url = 'https://rachitoman.github.io/yardwork/?client=' + encodeURIComponent(clientName);
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+  });
+}
+
+function render() {
+  renderStats();
+  if (currentTab === 'yard') renderYard();
+  else if (currentTab === 'all') renderAll();
+  else if (currentTab === 'pending') renderPending();
+  else if (currentTab === 'invoiced') renderInvoiced();
+  else if (currentTab === 'payments') renderPayments();
+  else if (currentTab === 'unpaid') renderUnpaid();
+  else if (currentTab === 'clients') renderClients();
+  else if (currentTab === 'rates') renderRates();
+}
+
+document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
+
+console.log('APP STARTING');
+/* ── Lock screen helpers ── */
+async function takeover() {
+  if (!confirm('Force take over the session? The other user will lose unsaved changes.')) return;
+  await acquireLock('AKHIL');
+  document.getElementById('lock-screen').classList.remove('show');
+  populateClientDropdowns();
+  render();
+}
+async function refreshLock() {
+  document.getElementById('lock-time-msg').textContent = 'Checking…';
+  await loadData();
+  if (!LOCK_INFO.lockedBy) {
+    document.getElementById('lock-screen').classList.remove('show');
+    await acquireLock('AKHIL');
+    populateClientDropdowns();
+    render();
+  } else {
+    showLockScreen();
+  }
+}
+function showLockScreen() {
+  if (isClientPortal()) return; // never show lock screen to clients
+  const by = LOCK_INFO.lockedBy || 'Someone';
+  const since = LOCK_INFO.lockedAt ? new Date(LOCK_INFO.lockedAt).toLocaleTimeString() : '';
+  document.getElementById('lock-user-msg').textContent =
+    by + ' is currently using this system. Please wait for them to finish or take over.';
+  document.getElementById('lock-time-msg').textContent =
+    since ? 'Session started at ' + since : '';
+  document.getElementById('lock-screen').classList.add('show');
+}
+function hideLoading() {
+  const el = document.getElementById('loading-screen');
+  if (el) el.style.display = 'none';
+}
+
+(async function(){
+  // ── Client portal: check URL FIRST before any network call ──
+  if (isClientPortal()) {
+    document.getElementById('loading-msg').textContent = 'Loading your containers…';
+    await loadData(true); // skipLock — client portal never participates in lock
+    hideLoading();
+    populateClientDropdowns();
+    applyUrlClientFilter();
+    // Apply client-portal CSS class to body (survives all re-renders)
+    document.body.classList.add('client-portal');
+
+    // Also hide explicitly as belt-and-braces
+    ['topbar-right','tab-btn-clients','tab-btn-rates','tab-btn-unpaid'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.setProperty('display','none','important');
+    });
+
+    // Replace topbar-left with clean client header
+    const topbarLeft = document.querySelector('.topbar-left');
+    if (topbarLeft) {
+      const clientLabel = new URLSearchParams(window.location.search).get('client');
+      topbarLeft.innerHTML = `
+        <div>
+          <div style="font-size:16px;font-weight:500">📦 Yard Container Tracker</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:2px">Viewing as: <strong>${clientLabel}</strong></div>
+        </div>`;
+    }
+
+    render();
+    return;
+  }
+
+  // ── Admin path ──
+  document.getElementById('loading-msg').textContent = 'Loading data…';
+  await loadData();
+  hideLoading();
+
+  if (!LOCK_INFO.lockedBy) {
+    await acquireLock('AKHIL');
+    populateClientDropdowns();
+    applyUrlClientFilter();
+    render();
+  } else {
+    showLockScreen();
+  }
+})();
+</script>
+</body>
+</html>
