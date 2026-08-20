@@ -167,6 +167,21 @@ table tbody tr:nth-child(even) {
 .lock-user { font-size:14px; color:var(--text2); margin-bottom:1.5rem; line-height:1.5; }
 .lock-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
 .lock-time { font-size:12px; color:var(--text2); margin-top:1rem; }
+
+/* Client portal mode — applied to <body> when ?client= is in URL */
+body.client-portal #topbar-right { display: none !important; }
+body.client-portal #tab-btn-clients { display: none !important; }
+body.client-portal #tab-btn-rates { display: none !important; }
+body.client-portal #tab-btn-unpaid { display: none !important; }
+body.client-portal .global-client-filter { display: none !important; }
+body.client-portal .btn-danger { pointer-events: none; opacity: 0.3; }
+body.client-portal .btn[onclick*="openEditDates"],
+body.client-portal .btn[onclick*="deleteEntry"],
+body.client-portal .btn[onclick*="markLoaded"],
+body.client-portal .btn[onclick*="openInvModal"],
+body.client-portal .btn[onclick*="bulkInvoice"],
+body.client-portal .btn[onclick*="unmarkInvoice"] { display: none !important; }
+
 </style>
 </head>
 <body>
@@ -532,11 +547,14 @@ table tbody tr:nth-child(even) {
 // ── Detect client portal immediately on script parse, before anything else ──
 window._IS_CLIENT_PORTAL = !!(new URLSearchParams(window.location.search).get('client'));
 if (window._IS_CLIENT_PORTAL) {
-  // Hide loading screen lock possibility early
+  // Apply CSS class to body immediately — hides all admin UI via CSS, survives re-renders
   document.addEventListener('DOMContentLoaded', function() {
+    document.body.classList.add('client-portal');
     const ls = document.getElementById('lock-screen');
-    if (ls) ls.style.display = 'none'; // ensure never shown for clients
+    if (ls) ls.style.display = 'none';
   });
+  // Also try immediately in case DOM is already ready
+  if (document.body) document.body.classList.add('client-portal');
 }
 
 /*
@@ -2518,12 +2536,16 @@ function hideLoading() {
     hideLoading();
     populateClientDropdowns();
     applyUrlClientFilter();
-    // Hide admin-only tabs: Clients, Rates, Unpaid Invoices, global filter & buttons
+    // Apply client-portal CSS class to body (survives all re-renders)
+    document.body.classList.add('client-portal');
+
+    // Also hide explicitly as belt-and-braces
     ['topbar-right','tab-btn-clients','tab-btn-rates','tab-btn-unpaid'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
+      if (el) el.style.setProperty('display','none','important');
     });
-    // Replace topbar with simple client header
+
+    // Replace topbar-left with clean client header
     const topbarLeft = document.querySelector('.topbar-left');
     if (topbarLeft) {
       const clientLabel = new URLSearchParams(window.location.search).get('client');
@@ -2533,18 +2555,7 @@ function hideLoading() {
           <div style="font-size:12px;color:var(--text2);margin-top:2px">Viewing as: <strong>${clientLabel}</strong></div>
         </div>`;
     }
-    // Rename tabs to be client-friendly
-    const tabLabels = {
-      'tab-btn-yard':     'In Yard',
-      'tab-btn-all':      'All Transactions',
-      'tab-btn-pending':  'Pending Invoice',
-      'tab-btn-invoiced': 'Invoiced',
-      'tab-btn-payments': 'Pending Payment'
-    };
-    Object.entries(tabLabels).forEach(([id, lbl]) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = lbl;
-    });
+
     render();
     return;
   }
