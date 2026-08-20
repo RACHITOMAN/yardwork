@@ -139,9 +139,57 @@ table tbody tr:nth-child(even) {
   .topbar { padding: 0 1rem; }
   .container { padding: 1rem 0.5rem; }
 }
+
+/* ── Per-client detail panel ── */
+.client-detail-panel { border:0.5px solid var(--border); border-radius: var(--radius-lg); overflow:hidden; margin-top:1rem; background:var(--bg); }
+.cdp-header { display:flex; align-items:center; gap:12px; padding:1rem 1.25rem; border-bottom:0.5px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
+.cdp-tabs { display:flex; border-bottom:0.5px solid var(--border); padding:0 1rem; overflow-x:auto; background:var(--bg); }
+.cdp-tab { padding:8px 14px; cursor:pointer; font-size:12px; color:var(--text2); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; white-space:nowrap; }
+.cdp-tab.active { color:var(--text); border-bottom:2px solid var(--text); font-weight:500; }
+.cdp-body { padding:1rem 1.25rem; }
+.stat-clickable { cursor:pointer; transition:box-shadow 0.15s; }
+.stat-clickable:hover { box-shadow: 0 0 0 2px #2563eb44; }
+
+
+/* Lock screen */
+#lock-screen {
+  display:none; position:fixed; inset:0; background:var(--bg3);
+  z-index:999; align-items:center; justify-content:center; flex-direction:column;
+}
+#lock-screen.show { display:flex; }
+.lock-card {
+  background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg);
+  padding:2.5rem 2rem; max-width:420px; width:90%; text-align:center;
+  box-shadow:0 8px 32px rgba(0,0,0,0.12);
+}
+.lock-icon { font-size:48px; margin-bottom:1rem; }
+.lock-title { font-size:20px; font-weight:600; margin-bottom:0.5rem; }
+.lock-user { font-size:14px; color:var(--text2); margin-bottom:1.5rem; line-height:1.5; }
+.lock-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.lock-time { font-size:12px; color:var(--text2); margin-top:1rem; }
 </style>
 </head>
 <body>
+
+
+<div id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <div class="lock-title">System In Use</div>
+    <div class="lock-user" id="lock-user-msg">Another user is currently using the system.</div>
+    <div class="lock-actions">
+      <button class="btn btn-primary" onclick="takeover()">Take Over</button>
+      <button class="btn" onclick="refreshLock()"><i class="ti ti-refresh"></i> Refresh</button>
+    </div>
+    <div class="lock-time" id="lock-time-msg"></div>
+  </div>
+</div>
+
+<div id="loading-screen" style="display:flex;position:fixed;inset:0;background:var(--bg3);z-index:998;align-items:center;justify-content:center;flex-direction:column;gap:12px">
+  <div style="font-size:32px">📦</div>
+  <div style="font-size:16px;font-weight:500">Yard Container Tracker</div>
+  <div style="font-size:13px;color:var(--text2)" id="loading-msg">Loading data…</div>
+</div>
 
 <div class="topbar">
   <div class="topbar-left">
@@ -184,18 +232,24 @@ table tbody tr:nth-child(even) {
 
   <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
     <div class="tabs" id="tabs">
-      <button id="tab-btn-yard" class="tab active" onclick="switchTab('yard',this)">In Yard</button>
-<button id="tab-btn-all" class="tab" onclick="switchTab('all',this)">All Transactions</button>
-<button id="tab-btn-invoiced" class="tab" onclick="switchTab('invoiced',this)">Invoiced</button>
-<button id="tab-btn-clients" class="tab" onclick="switchTab('clients',this)">Clients</button>
-<button id="tab-btn-rates" class="tab" onclick="switchTab('rates',this)">Rate Sheet</button>
+      <button id="tab-btn-yard"      class="tab active" onclick="switchTab('yard',this)">In Yard</button>
+<button id="tab-btn-all"       class="tab"        onclick="switchTab('all',this)">All Transactions</button>
+<button id="tab-btn-pending"   class="tab"        onclick="switchTab('pending',this)">Pending Invoice</button>
+<button id="tab-btn-invoiced"  class="tab"        onclick="switchTab('invoiced',this)">Invoiced</button>
+<button id="tab-btn-payments"  class="tab"        onclick="switchTab('payments',this)">Pending Payment</button>
+<button id="tab-btn-unpaid"    class="tab"        onclick="switchTab('unpaid',this)">Unpaid Invoices</button>
+<button id="tab-btn-clients"   class="tab"        onclick="switchTab('clients',this)">Clients</button>
+<button id="tab-btn-rates"     class="tab"        onclick="switchTab('rates',this)">Rate Sheet</button>
     </div>
     <div style="padding:1.25rem">
       <div id="tab-yard"></div>
-      <div id="tab-all" style="display:none"></div>
+      <div id="tab-all"      style="display:none"></div>
+      <div id="tab-pending"  style="display:none"></div>
       <div id="tab-invoiced" style="display:none"></div>
-      <div id="tab-clients" style="display:none"></div>
-      <div id="tab-rates" style="display:none"></div>
+      <div id="tab-payments" style="display:none"></div>
+      <div id="tab-unpaid"   style="display:none"></div>
+      <div id="tab-clients"  style="display:none"></div>
+      <div id="tab-rates"    style="display:none"></div>
     </div>
   </div>
 </div>
@@ -1472,84 +1526,46 @@ function yardTableWrap(rows) {
 function renderStats() {
   let data = DB.filter(e => !e.deleted);
   if (globalClientFilter) data = data.filter(e => e.clientId === globalClientFilter);
-  const inYard =
-    data.filter(
-      e => e.op === 'unload' && !e.loaded
-    ).length;
-
-  const pendingUnloadLoad =
-    data.filter(
-      e =>
-        e.op === 'unload' &&
-        e.loaded &&
-        !e.invoiced
-    ).length;
-
-  const pendingCross =
-    data.filter(
-      e =>
-        e.op === 'cross' &&
-        !e.invoiced
-    ).length;
-
-  const totalPending =
-    pendingUnloadLoad +
-    pendingCross;
-
-  const clientCount =
-    CLIENTS.filter(
-      c => !c.deleted
-  ).length;
-
+  const inYard = data.filter(e => e.op === 'unload' && !e.loaded).length;
+  const pendingUnloadLoad = data.filter(e => e.op === 'unload' && e.loaded && !e.invoiced).length;
+  const pendingCross = data.filter(e => e.op === 'cross' && !e.invoiced).length;
+  const totalPending = pendingUnloadLoad + pendingCross;
+  const clientCount = CLIENTS.filter(c => !c.deleted).length;
   const invoiceGroups = {};
   data.filter(e => e.invoiced && e.invoiceNo).forEach(e => {
     (invoiceGroups[e.invoiceNo] = invoiceGroups[e.invoiceNo] || []).push(e);
   });
   const unpaidInvoices = Object.values(invoiceGroups).filter(g => g.some(e => !e.paidDate)).length;
+  const unpaidAmt = data.filter(e => e.invoiced && !e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
 
- document.getElementById('stats').innerHTML = `
-   <div class="stat">
-     <div class="stat-label">In Yard</div>
-     <div class="stat-num" style="color:#1D9E75">
-       ${inYard}
-     </div>
-   </div>
-
-   <div class="stat">
-     <div class="stat-label">Unload+Load Pending</div>
-     <div class="stat-num" style="color:#BA7517">
-       ${pendingUnloadLoad}
-     </div>
-   </div>
-
-   <div class="stat">
-     <div class="stat-label">Cross-Load Pending</div>
-     <div class="stat-num" style="color:#2563EB">
-       ${pendingCross}
-     </div>
-   </div>
-
-   <div class="stat">
-     <div class="stat-label">Total Pending</div>
-     <div class="stat-num" style="color:#E24B4A">
-       ${totalPending}
-     </div>
-   </div>
-
-   <div class="stat">
-     <div class="stat-label">Unpaid Invoices</div>
-     <div class="stat-num" style="color:#B3261E">
-       ${unpaidInvoices}
-     </div>
-   </div>
-
-   <div class="stat">
-     <div class="stat-label">Clients</div>
-     <div class="stat-num">
-       ${clientCount}
-     </div>
-  </div>`;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat stat-clickable" onclick="switchTab('yard', document.getElementById('tab-btn-yard'))" title="View In Yard">
+      <div class="stat-label">In Yard</div>
+      <div class="stat-num" style="color:#1D9E75">${inYard}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View Pending Invoice">
+      <div class="stat-label">Unload+Load Pending</div>
+      <div class="stat-num" style="color:#BA7517">${pendingUnloadLoad}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View Pending Invoice">
+      <div class="stat-label">Cross-Load Pending</div>
+      <div class="stat-num" style="color:#2563EB">${pendingCross}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('pending', document.getElementById('tab-btn-pending'))" title="View All Pending">
+      <div class="stat-label">Total Pending</div>
+      <div class="stat-num" style="color:#E24B4A">${totalPending}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('unpaid', document.getElementById('tab-btn-unpaid'))" title="View Unpaid Invoices">
+      <div class="stat-label">Unpaid Invoices</div>
+      <div class="stat-num" style="color:#B3261E">${unpaidInvoices}</div>
+      <div style="font-size:11px;color:#B3261E;margin-top:2px">RO ${unpaidAmt.toFixed(2)}</div>
+    </div>
+    <div class="stat stat-clickable" onclick="switchTab('clients', document.getElementById('tab-btn-clients'))" title="View Clients">
+      <div class="stat-label">Clients</div>
+      <div class="stat-num">${clientCount}</div>
+    </div>`;
 }
+
 
 function renderYard() {
 
@@ -1680,7 +1696,7 @@ function renderClients() {
   const active = CLIENTS.filter(c => !c.deleted).sort((a,b) => a.name.localeCompare(b.name));
   let html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
     <div class="section-title" style="margin:0">Clients (${active.length})</div>
-    <button class="btn btn-primary btn-sm" onclick="openClientModal(null)"><i class="ti ti-plus" aria-hidden="true"></i> Add client</button>
+    <button class="btn btn-primary btn-sm" onclick="openClientModal(null)"><i class="ti ti-plus"></i> Add client</button>
   </div>`;
   if (!active.length) {
     html += '<div class="empty">No clients yet. Add your first client above.</div>';
@@ -1688,55 +1704,187 @@ function renderClients() {
     active.forEach((c, i) => {
       const ai = i % AV_BG.length;
       const txAll = DB.filter(e => !e.deleted && e.clientId === c.id);
-      const inYard = txAll.filter(e => e.op === 'unload' && !e.loadDate).length;
+      const inYard = txAll.filter(e => e.op === 'unload' && !e.loaded).length;
       const totalBilled = txAll.filter(e => e.invoiced).reduce((s,e) => s + calcTotal(e).total, 0);
-      const pendingAmt = txAll.filter(e => !e.invoiced && (e.loadDate || e.op==='cross')).reduce((s,e) => s + calcTotal(e).total, 0);
-      const loadedTx =
-  txAll.filter(e => e.loadDate);
-
-const lastLoaded =
-  loadedTx.length
-    ? loadedTx
-        .sort((a,b) =>
-          (b.loadDate || '').localeCompare(a.loadDate || '')
-        )[0].loadDate
-    : '';
+      const pendingAmt = txAll.filter(e => !e.invoiced && (e.loaded || e.op==='cross')).reduce((s,e) => s + calcTotal(e).total, 0);
+      const unpaidAmt = txAll.filter(e => e.invoiced && !e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
+      const loadedTx = txAll.filter(e => e.loadDate).sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
+      const lastLoaded = loadedTx.length ? loadedTx[0].loadDate : '';
       html += `<div class="client-row">
         <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:500;font-size:14px">${c.name}${c.code ? ` <span style="font-size:11px;color:var(--text2)">(${c.code})</span>` : ''}</div>
+          <div style="font-weight:500;font-size:14px">${c.name}</div>
           <div class="client-summary">
-            ${c.contact ? c.contact + ' • ' : ''}${c.phone || ''}${(c.contact||c.phone) ? ' • ' : ''}
-           <span style="color:#1D9E75">${inYard} in yard</span> •
-${txAll.length} total tx •
-Last loaded:
-${lastLoaded ? fmt(lastLoaded) : '-'}
+            <span style="color:#1D9E75">${inYard} in yard</span> &bull;
+            ${txAll.length} total tx &bull;
+            Last loaded: ${lastLoaded ? fmt(lastLoaded) : '–'} &bull;
+            RO ${totalBilled.toFixed(2)} billed &bull;
+            <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending invoice</span> &bull;
+            <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span>
           </div>
-          ${c.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:2px">${c.notes}</div>` : ''}
         </div>
-        <div style="display:flex;gap:6px;flex-shrink:0">
-          <button class="btn btn-sm" onclick="viewClient('${c.id}')"><i class="ti ti-eye" aria-hidden="true"></i> View</button>
-          <button class="btn btn-sm" onclick="openClientModal('${c.id}')"><i class="ti ti-edit" aria-hidden="true"></i></button>
-          <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')"><i class="ti ti-trash" aria-hidden="true"></i></button>
+        <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+          <button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')"><i class="ti ti-file-spreadsheet"></i> In-Yard XLS</button>
+          <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')"><i class="ti ti-layout-list"></i> Detail</button>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.name}')" title="Copy portal link for this client"><i class="ti ti-link"></i> Client Link</button>
+          <button class="btn btn-sm" onclick="openClientModal('${c.id}')"><i class="ti ti-edit"></i></button>
+          <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')"><i class="ti ti-trash"></i></button>
         </div>
       </div>`;
     });
   }
   document.getElementById('tab-clients').innerHTML = html;
+  // Re-render detail panel if open
+  if (window._detailClientId) renderClientDetail(window._detailClientId, window._detailTab || 'inyard');
+}
+
+function openClientDetail(cid, tab) {
+  window._detailClientId = cid;
+  window._detailTab = tab || 'inyard';
+  // Make sure clients tab is active
+  if (currentTab !== 'clients') {
+    switchTab('clients', document.getElementById('tab-btn-clients'));
+    return;
+  }
+  renderClientDetail(cid, window._detailTab);
+}
+
+function setDetailTab(cid, tab) {
+  window._detailClientId = cid;
+  window._detailTab = tab;
+  renderClientDetail(cid, tab);
+}
+
+function closeClientDetail() {
+  window._detailClientId = null;
+  window._detailTab = null;
+  const p = document.getElementById('client-detail-panel');
+  if (p) p.remove();
+}
+
+function renderClientDetail(cid, tab) {
+  if (!cid) return;
+  tab = tab || 'inyard';
+  const c = clientById(cid); if (!c) return;
+  const ai = CLIENTS.filter(x=>!x.deleted).findIndex(x=>x.id===cid) % AV_BG.length;
+  const txAll = DB.filter(e => !e.deleted && e.clientId === cid);
+  const inYardRows = txAll.filter(e => e.op === 'unload' && !e.loaded);
+  const pendingRows = txAll.filter(e => !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded)));
+  const invoicedRows = txAll.filter(e => e.invoiced);
+  const unpaidInvGroups = {};
+  invoicedRows.filter(e => !e.paidDate && e.invoiceNo).forEach(e => { (unpaidInvGroups[e.invoiceNo] = unpaidInvGroups[e.invoiceNo] || []).push(e); });
+
+  const TABS = [
+    ['inyard', `In Yard (${inYardRows.length})`],
+    ['alltx', `All Transactions (${txAll.length})`],
+    ['pending', `Pending Invoice (${pendingRows.length})`],
+    ['invoiced', `Invoiced (${invoicedRows.length})`],
+    ['ppay', `Pending Payment (${Object.keys(unpaidInvGroups).length} invoices)`]
+  ];
+  const tabBtns = TABS.map(([id,lbl]) =>
+    `<button class="cdp-tab${tab===id?' active':''}" onclick="setDetailTab('${cid}','${id}')">${lbl}</button>`
+  ).join('');
+
+  let bodyHtml = '';
+
+  if (tab === 'inyard') {
+    const tS = inYardRows.reduce((s,e) => s + calcTotal(e).storageCost, 0);
+    const tT = inYardRows.reduce((s,e) => s + calcTotal(e).total, 0);
+    bodyHtml = `<div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    </div>` + (inYardRows.length ? yardTableWrap(inYardRows.map(e=>yardRow(e)).join('')) +
+      `<div style="text-align:right;font-size:12px;color:var(--text2);margin-top:6px">Accrued storage: <strong>RO ${tS.toFixed(2)}</strong> &nbsp;|&nbsp; Total accrued: <strong>RO ${tT.toFixed(2)}</strong></div>` :
+      '<div class="empty">No containers in yard for this client.</div>');
+  }
+  else if (tab === 'alltx') {
+    const sorted = [...txAll].sort((a,b) => (b.unloadDate||b.loadDate||'').localeCompare(a.unloadDate||a.loadDate||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+    </div>` + tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot);
+  }
+  else if (tab === 'pending') {
+    const sorted = [...pendingRows].sort((a,b) => (a.unloadDate||'').localeCompare(b.unloadDate||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Pending total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientBillingExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Billing Excel</button>
+    </div>` + (sorted.length ? tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot) : '<div class="empty">No containers pending invoice.</div>');
+  }
+  else if (tab === 'invoiced') {
+    const sorted = [...invoicedRows].sort((a,b) => (b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+    const total = sorted.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = sorted.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px">
+      <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    </div>` + (sorted.length ? tableWrap(sorted.map(e=>entryRow(e)).join(''), tfoot) : '<div class="empty">No invoiced containers.</div>');
+  }
+  else if (tab === 'ppay') {
+    const groupArr = Object.entries(unpaidInvGroups).map(([inv, entries]) => ({
+      inv, entries, total: entries.reduce((s,e) => s + calcTotal(e).total, 0)
+    })).sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+    const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+    const rows = groupArr.map(g => `<tr>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="markInvoicePaidFromDetail('${g.inv}','${cid}')" title="Click to mark paid">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`).join('');
+    const tfoot = groupArr.length ? `<tfoot><tr class="tfoot-row"><td colspan="2">Unpaid total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="margin-bottom:1rem;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientPendingPaymentExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    </div>
+    <div class="overflow-x"><table>
+      <thead><tr><th>Invoice No.</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5" class="empty">No unpaid invoices.</td></tr>'}</tbody>
+      ${tfoot}
+    </table></div>`;
+  }
+
+  const totalBilled = invoicedRows.reduce((s,e) => s + calcTotal(e).total, 0);
+  const unpaidAmt = invoicedRows.filter(e=>!e.paidDate).reduce((s,e) => s + calcTotal(e).total, 0);
+
+  let panel = document.getElementById('client-detail-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'client-detail-panel';
+    panel.className = 'client-detail-panel';
+    document.getElementById('tab-clients').appendChild(panel);
+  }
+  panel.innerHTML = `
+    <div class="cdp-header">
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};width:40px;height:40px;font-size:14px">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:15px">${escapeHtml(c.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">
+          <span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
+          <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
+          RO ${totalBilled.toFixed(2)} billed &bull;
+          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
+          ${txAll.length} total transactions
+        </div>
+      </div>
+      <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
+    </div>
+    <div class="cdp-tabs">${tabBtns}</div>
+    <div class="cdp-body">${bodyHtml}</div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function markInvoicePaidFromDetail(invoiceNo, cid) {
+  const entries = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo));
+  currentPaidIds = entries.map(e => e.id);
+  document.getElementById('paid-date').value = today();
+  document.getElementById('modal-paid').classList.add('open');
+  // After save, re-render detail
+  window._afterPaid = () => renderClientDetail(cid, 'ppay');
 }
 
 function viewClient(id) {
-
-  globalClientFilter = id;
-
-  document.getElementById(
-    'global-client-filter'
-  ).value = id;
-
-  switchTab(
-    'all',
-    document.getElementById('tab-btn-all')
-  );
+  openClientDetail(id, 'inyard');
 }
 
 function renderRates() {
@@ -1768,8 +1916,9 @@ function switchTab(tab, el) {
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['yard','all','invoiced','clients','rates'].forEach(t => {
-    document.getElementById('tab-' + t).style.display = t === tab ? 'block' : 'none';
+  ['yard','all','pending','invoiced','payments','unpaid','clients','rates'].forEach(t => {
+    const el2 = document.getElementById('tab-' + t);
+    if (el2) el2.style.display = t === tab ? 'block' : 'none';
   });
   render();
 }
@@ -2057,11 +2206,256 @@ function exportPendingInvoiceSummary() {
   );
 
 }
+
+/* ── Pending Invoice tab ── */
+function renderPending() {
+  let data = filterByClient(DB.filter(e => !e.deleted && !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded))));
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-pending').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportBillingSheet()"><i class="ti ti-file-spreadsheet"></i> Export Billing Excel</button>
+    <select id="f-pend-cl" onchange="renderPendingFiltered()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="pending-table"></div>`;
+  renderPendingFiltered();
+}
+function renderPendingFiltered() {
+  const cl = document.getElementById('f-pend-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded))));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  data.sort((a,b) => (a.unloadDate||'').localeCompare(b.unloadDate||''));
+  const total = data.reduce((s,e) => s + calcTotal(e).total, 0);
+  const tfoot = data.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Pending total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+  document.getElementById('pending-table').innerHTML = tableWrap(data.map(e=>entryRow(e)).join(''), tfoot);
+}
+
+/* ── Pending Payment tab ── */
+function renderPayments() {
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo));
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-payments').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()"><i class="ti ti-file-spreadsheet"></i> Export Pending Payment Excel</button>
+    <select id="f-pay-status" onchange="renderPaymentsTable()"><option value="">All</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select>
+    <select id="f-pay-cl" onchange="renderPaymentsTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="payments-table"></div>`;
+  renderPaymentsTable();
+}
+function renderPaymentsTable() {
+  const pf = document.getElementById('f-pay-status')?.value || '';
+  const cl = document.getElementById('f-pay-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  let groupArr = Object.entries(groups).map(([inv, entries]) => {
+    const isPaid = entries.every(e => e.paidDate);
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    const paidDate = isPaid ? entries.map(e=>e.paidDate).sort().pop() : '';
+    return { inv, entries, isPaid, total, paidDate, cId: entries[0].clientId };
+  });
+  if (pf === 'paid') groupArr = groupArr.filter(g => g.isPaid);
+  if (pf === 'unpaid') groupArr = groupArr.filter(g => !g.isPaid);
+  groupArr.sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+  const unpaidTotal = groupArr.filter(g=>!g.isPaid).reduce((s,g) => s + g.total, 0);
+  const rows = groupArr.map(g => {
+    const allSel = g.entries.length > 0 && g.entries.every(e => selectedInvoices.has(e.id));
+    return `<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${g.inv}',this.checked)"></td>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td>${escapeHtml(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge ${g.isPaid?'badge-paid':'badge-unpaid'}" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${g.inv}')">${g.isPaid?'Paid '+fmt(g.paidDate):'Unpaid — click to mark paid'}</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot = groupArr.length ? `<tfoot>
+    <tr class="tfoot-row"><td colspan="4">Grand total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr>
+    <tr class="tfoot-row" style="color:#B3261E"><td colspan="4">Unpaid total</td><td>RO ${unpaidTotal.toFixed(2)}</td><td colspan="2"></td></tr>
+  </tfoot>` : '';
+  document.getElementById('payments-table').innerHTML = `<div class="overflow-x"><table>
+    <thead><tr><th style="width:36px"></th><th>Invoice No.</th><th>Client</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="empty">No invoices found.</td></tr>'}</tbody>
+    ${tfoot}
+  </table></div>`;
+}
+function toggleGroupSelect(invoiceNo, checked) {
+  const ids = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo)).map(e=>e.id);
+  ids.forEach(id => checked ? selectedInvoices.add(id) : selectedInvoices.delete(id));
+  document.querySelectorAll('.mark-paid-count-btn').forEach(b => b.textContent = `Mark Paid (${selectedInvoices.size})`);
+}
+function bulkToggleInvoicePaid(invoiceNo) {
+  const entries = DB.filter(e => !e.deleted && e.invoiced && String(e.invoiceNo) === String(invoiceNo));
+  const allPaid = entries.every(e => e.paidDate);
+  if (allPaid) {
+    if (confirm(`Unmark invoice ${invoiceNo} as paid?`)) { entries.forEach(e => e.paidDate = ''); render(); saveData(); }
+  } else {
+    currentPaidIds = entries.map(e => e.id);
+    document.getElementById('paid-date').value = today();
+    document.getElementById('modal-paid').classList.add('open');
+  }
+}
+
+/* ── Unpaid Invoices tab ── */
+function renderUnpaid() {
+  const clientOpts = CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  document.getElementById('tab-unpaid').innerHTML = `<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    <select id="f-unpaid-cl" onchange="renderUnpaidTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="unpaid-table"></div>`;
+  renderUnpaidTable();
+}
+function renderUnpaidTable() {
+  const cl = document.getElementById('f-unpaid-cl')?.value || '';
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && !e.paidDate));
+  if (cl) data = data.filter(e => e.clientId === cl);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const groupArr = Object.entries(groups).map(([inv, entries]) => ({
+    inv, entries, total: entries.reduce((s,e) => s + calcTotal(e).total, 0), cId: entries[0].clientId
+  })).sort((a,b) => String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal = groupArr.reduce((s,g) => s + g.total, 0);
+  const rows = groupArr.map(g => {
+    const allSel = g.entries.every(e => selectedInvoices.has(e.id));
+    return `<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${g.inv}',this.checked)"></td>
+      <td><strong>${escapeHtml(g.inv)}</strong></td>
+      <td>${escapeHtml(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${g.inv}')" title="Click to mark paid">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>e.containerNo).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot = groupArr.length ? `<tfoot><tr class="tfoot-row"><td colspan="4">Total unpaid</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>` : '';
+  document.getElementById('unpaid-table').innerHTML = `<div class="overflow-x"><table>
+    <thead><tr>
+      <th style="width:36px"></th><th>Invoice No.</th><th>Client</th>
+      <th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th>
+    </tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="empty">No unpaid invoices.</td></tr>'}</tbody>
+    ${tfoot}
+  </table></div>`;
+}
+
+/* ── Excel exports ── */
+function fmtXl(d) { return d ? fmt(d) : ''; }
+
+function exportClientInYardExcel(cid) {
+  const c = clientById(cid);
+  const label = c ? c.name : 'All Clients';
+  let data = DB.filter(e => !e.deleted && e.op === 'unload' && !e.loaded);
+  if (cid) data = data.filter(e => e.clientId === cid);
+  if (!data.length) { alert('No containers in yard.'); return; }
+  let tS=0, tT=0;
+  const rows = data.map(e => {
+    const r = calcTotal(e);
+    tS += r.storageCost; tT += r.total;
+    return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Storage Accrued (RO)': parseFloat(r.storageCost.toFixed(2)), 'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)), 'Total Accrued (RO)': parseFloat(r.total.toFixed(2)), 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
+  });
+  rows.push({});
+  rows.push({ 'Container No':'TOTAL', 'Storage Accrued (RO)': parseFloat(tS.toFixed(2)), 'Total Accrued (RO)': parseFloat(tT.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'In Yard');
+  XLSX.writeFile(wb, `${label}_InYard_${today()}.xlsx`);
+}
+
+function exportBillingSheet(cid) {
+  let data = DB.filter(e => !e.deleted && !e.invoiced && (e.loaded || e.op === 'cross'));
+  const cidToUse = cid || globalClientFilter;
+  if (cidToUse) data = data.filter(e => e.clientId === cidToUse);
+  if (!data.length) { alert('No ready-to-invoice containers found.'); return; }
+  const label = cidToUse ? clientName(cidToUse) : 'All Clients';
+  let tS=0,tOp=0,tTotal=0;
+  const rows = data.map(e => {
+    const r = calcTotal(e);
+    tS+=r.storageCost; tOp+=r.opCost; tTotal+=r.total;
+    return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Gate Out': fmtXl(e.loadDate), 'Days': r.days, 'Storage Charges (RO)': parseFloat(r.storageCost.toFixed(3)), 'Load Off/On (RO)': parseFloat(r.opCost.toFixed(3)), 'Total Charges (RO)': parseFloat(r.total.toFixed(3)), 'Remarks': e.op==='cross'?'Cross Load':(e.remarks||'') };
+  });
+  rows.push({});
+  rows.push({ 'Container No':'TOTAL', 'Storage Charges (RO)': parseFloat(tS.toFixed(3)), 'Load Off/On (RO)': parseFloat(tOp.toFixed(3)), 'Total Charges (RO)': parseFloat(tTotal.toFixed(3)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:22},{wch:18},{wch:20},{wch:20}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Billing');
+  XLSX.writeFile(wb, `${label}_Billing_${today()}.xlsx`);
+}
+
+function exportClientBillingExcel(cid) { exportBillingSheet(cid); }
+
+function exportPendingPaymentExcel() {
+  let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && !e.paidDate));
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const rows = Object.entries(groups).map(([inv, entries]) => {
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    return { 'Invoice No': inv, 'Client': clientName(entries[0].clientId), 'Containers': entries.length, 'Container Nos': entries.map(e=>e.containerNo).join(', '), 'Amount (RO)': parseFloat(total.toFixed(2)), 'Status': 'Unpaid' };
+  }).sort((a,b) => String(b['Invoice No']).localeCompare(String(a['Invoice No'])));
+  if (!rows.length) { alert('No unpaid invoices.'); return; }
+  const grand = rows.reduce((s,r) => s + r['Amount (RO)'], 0);
+  rows.push({}); rows.push({ 'Invoice No':'TOTAL', 'Amount (RO)': parseFloat(grand.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:28},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pending Payments');
+  XLSX.writeFile(wb, `Pending_Payment_Summary_${today()}.xlsx`);
+}
+
+function exportClientPendingPaymentExcel(cid) {
+  const c = clientById(cid);
+  const data = DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && e.clientId === cid && !e.paidDate);
+  const groups = {};
+  data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
+  const rows = Object.entries(groups).map(([inv, entries]) => {
+    const total = entries.reduce((s,e) => s + calcTotal(e).total, 0);
+    return { 'Invoice No': inv, 'Containers': entries.length, 'Container Nos': entries.map(e=>e.containerNo).join(', '), 'Amount (RO)': parseFloat(total.toFixed(2)), 'Status': 'Unpaid' };
+  });
+  if (!rows.length) { alert('No unpaid invoices for this client.'); return; }
+  const grand = rows.reduce((s,r) => s + r['Amount (RO)'], 0);
+  rows.push({}); rows.push({ 'Invoice No':'TOTAL', 'Amount (RO)': parseFloat(grand.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:16},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Pending Payment');
+  XLSX.writeFile(wb, `${c?c.name:'Client'}_PendingPayment_${today()}.xlsx`);
+}
+
+/* patch savePaidDate to call _afterPaid hook */
+const _origSavePaidDate = savePaidDate;
+function savePaidDate() {
+  const date = document.getElementById('paid-date').value; if (!date) return;
+  currentPaidIds.forEach(id => { const e = DB.find(x => x.id === id); if (e) e.paidDate = date; });
+  currentPaidIds = []; selectedInvoices.clear(); closeModal('modal-paid'); render(); saveData();
+  if (window._afterPaid) { window._afterPaid(); window._afterPaid = null; }
+}
+
+
+function copyClientLink(clientName) {
+  const url = 'https://rachitoman.github.io/yardwork/?client=' + encodeURIComponent(clientName);
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = url;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+  });
+}
+
 function render() {
   renderStats();
   if (currentTab === 'yard') renderYard();
   else if (currentTab === 'all') renderAll();
+  else if (currentTab === 'pending') renderPending();
   else if (currentTab === 'invoiced') renderInvoiced();
+  else if (currentTab === 'payments') renderPayments();
+  else if (currentTab === 'unpaid') renderUnpaid();
   else if (currentTab === 'clients') renderClients();
   else if (currentTab === 'rates') renderRates();
 }
@@ -2069,37 +2463,72 @@ function render() {
 document.getElementById('today-label').textContent = 'Today: ' + fmt(today());
 
 console.log('APP STARTING');
-(async function(){
+/* ── Lock screen helpers ── */
+async function takeover() {
+  if (!confirm('Force take over the session? The other user will lose unsaved changes.')) return;
+  await acquireLock('AKHIL');
+  document.getElementById('lock-screen').classList.remove('show');
+  populateClientDropdowns();
+  render();
+}
+async function refreshLock() {
+  document.getElementById('lock-time-msg').textContent = 'Checking…';
   await loadData();
   if (!LOCK_INFO.lockedBy) {
-
-  await acquireLock('AKHIL');
-
-} else {
-
-  alert(
-    'System currently in use by ' +
-    LOCK_INFO.lockedBy
-  );
-
-  return;
-
+    document.getElementById('lock-screen').classList.remove('show');
+    await acquireLock('AKHIL');
+    populateClientDropdowns();
+    render();
+  } else {
+    showLockScreen();
+  }
 }
-  populateClientDropdowns();
+function showLockScreen() {
+  const by = LOCK_INFO.lockedBy || 'Someone';
+  const since = LOCK_INFO.lockedAt ? new Date(LOCK_INFO.lockedAt).toLocaleTimeString() : '';
+  document.getElementById('lock-user-msg').textContent =
+    by + ' is currently using this system. Please wait for them to finish or take over.';
+  document.getElementById('lock-time-msg').textContent =
+    since ? 'Session started at ' + since : '';
+  document.getElementById('lock-screen').classList.add('show');
+}
+function hideLoading() {
+  const el = document.getElementById('loading-screen');
+  if (el) el.style.display = 'none';
+}
 
-  applyUrlClientFilter();
-
+(async function(){
+  // ── Client portal: check URL FIRST before any network call ──
   if (isClientPortal()) {
+    document.getElementById('loading-msg').textContent = 'Loading your containers…';
+    await loadData();
+    hideLoading();
+    populateClientDropdowns();
+    applyUrlClientFilter();
+    // Hide all admin elements
+    ['topbar-right','tab-btn-clients','tab-btn-rates',
+     'tab-btn-invoiced','tab-btn-pending','tab-btn-payments',
+     'tab-btn-unpaid','tab-btn-all'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    render();
+    return;
+  }
 
-  document.getElementById('topbar-right').style.display = 'none';
+  // ── Admin path ──
+  document.getElementById('loading-msg').textContent = 'Loading data…';
+  await loadData();
+  hideLoading();
 
-  document.getElementById('tab-btn-clients').style.display = 'none';
-
-  document.getElementById('tab-btn-rates').style.display = 'none';
-  document.getElementById('tab-btn-invoiced').style.display = 'none';
-}
-
-  render();
+  if (!LOCK_INFO.lockedBy) {
+    await acquireLock('AKHIL');
+    populateClientDropdowns();
+    applyUrlClientFilter();
+    render();
+  } else {
+    showLockScreen();
+  }
 })();
 </script>
 </body>
