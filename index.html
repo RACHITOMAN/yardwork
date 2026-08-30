@@ -465,13 +465,16 @@ if (window.location.hash.match(/^#client=/) || new URLSearchParams(window.locati
       <input id="edit-salesref" type="text">
     </div>
 
+    <div id="edit-date-hint" style="display:none;font-size:12px;color:#16a34a;margin-bottom:8px;padding:6px 10px;background:#E1F5EE;border-radius:6px">
+      Dates are pre-filled — only change if needed.
+    </div>
     <div class="field" style="margin-bottom:10px">
       <label>Unload Date</label>
       <input id="edit-unload-date" type="date">
     </div>
 
     <div class="field" style="margin-bottom:10px">
-      <label>Load Date</label>
+      <label>Load Date <span style="font-size:11px;color:var(--text2)">(leave blank to keep existing)</span></label>
       <input id="edit-load-date" type="date">
     </div>
 
@@ -1290,91 +1293,72 @@ async function saveLoadedDate() {
   saveData();
 }
 function openEditDates(id) {
-
-  const e =
-    DB.find(x => x.id === id);
-
+  const e = DB.find(x => x.id === id);
   if (!e) return;
-
   currentEditId = id;
 
-  document.getElementById('edit-cnum').value =
-    e.containerNo || '';
+  // Populate client dropdown first, then set value
+  populateClientDropdowns();
 
-  document.getElementById('edit-client').value =
-    e.clientId || '';
+  document.getElementById('edit-cnum').value        = e.containerNo  || '';
+  document.getElementById('edit-salesref').value    = e.salesRef     || '';
+  document.getElementById('edit-remarks').value     = e.remarks      || '';
+  document.getElementById('edit-unload-date').value = e.unloadDate   || '';
+  document.getElementById('edit-load-date').value   = e.loadDate     || '';
 
-  document.getElementById('edit-salesref').value =
-    e.salesRef || '';
+  // Set client after dropdown is populated
+  const clientSel = document.getElementById('edit-client');
+  if (clientSel) clientSel.value = e.clientId || '';
 
-  document.getElementById('edit-remarks').value =
-    e.remarks || '';
+  // Show a hint if dates are already filled
+  const hint = document.getElementById('edit-date-hint');
+  if (hint) {
+    if (e.unloadDate || e.loadDate) {
+      hint.textContent = 'Dates are pre-filled — only change if needed.';
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
+  }
 
-  document.getElementById('edit-unload-date').value =
-    e.unloadDate || '';
-
-  document.getElementById('edit-load-date').value =
-    e.loadDate || '';
-
-  document
-    .getElementById('modal-edit-dates')
-    .classList
-    .add('open');
+  document.getElementById('modal-edit-dates').classList.add('open');
 }
-async function saveEditedDates() {
 
-  const e =
-    DB.find(x => x.id === currentEditId);
 
+function saveEditedDates() {
+  const e = DB.find(x => x.id === currentEditId);
   if (!e) return;
 
-  const containerNo =
-    document.getElementById('edit-cnum').value.trim();
+  const containerNo = (document.getElementById('edit-cnum').value || '').trim();
+  if (!containerNo) { alert('Container number is required.'); return; }
 
-  if (!containerNo) {
-    alert('Container number is required.');
+  const clientId    = document.getElementById('edit-client').value || e.clientId;
+  const salesRef    = document.getElementById('edit-salesref').value.trim();
+  const remarks     = document.getElementById('edit-remarks').value.trim();
+  const unloadDate  = document.getElementById('edit-unload-date').value;
+  const loadDate    = document.getElementById('edit-load-date').value;
+
+  if (unloadDate && loadDate && loadDate < unloadDate) {
+    alert('Load date cannot be earlier than unload date.');
     return;
   }
 
-  const clientId =
-    document.getElementById('edit-client').value;
-
-  const salesRef =
-    document.getElementById('edit-salesref').value.trim();
-
-  const remarks =
-    document.getElementById('edit-remarks').value.trim();
-
-  const unloadDate =
-    document.getElementById('edit-unload-date').value;
-
-  const loadDate =
-    document.getElementById('edit-load-date').value;
-
-  if (
-    unloadDate &&
-    loadDate &&
-    loadDate < unloadDate
-  ) {
-    alert(
-      'Load date cannot be earlier than unload date.'
-    );
-    return;
-  }
-
+  // Always update text fields
   e.containerNo = containerNo;
-  e.clientId = clientId;
-  e.salesRef = salesRef;
-  e.remarks = remarks;
-  e.unloadDate = unloadDate || '';
-  e.loadDate = loadDate || '';
+  e.clientId    = clientId;
+  e.salesRef    = salesRef;
+  e.remarks     = remarks;
 
-  e.loaded = !!loadDate;
+  // Only update dates if a value is present — never blank out an existing date
+  if (unloadDate) e.unloadDate = unloadDate;
+  if (loadDate)   { e.loadDate = loadDate; e.loaded = true; }
 
   closeModal('modal-edit-dates');
   render();
   saveData();
 }
+
+
 async function acquireLock(user) {
 
   await fetch(GOOGLE_SCRIPT_URL, {
