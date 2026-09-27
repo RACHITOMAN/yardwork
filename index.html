@@ -888,6 +888,8 @@ for (const [i, cnum] of lines.entries()) {
    const duplicate = DB.find(
      e =>
        !e.deleted &&
+       e.op === 'unload' &&
+       !e.loaded &&
        e.containerNo === cnum
    );
 
@@ -923,11 +925,11 @@ for (const [i, cnum] of lines.entries()) {
    `Imported: ${added}\n\n`;
 
  msg +=
-   `Skipped Existing: ${skippedExisting.length}\n`;
+   `Skipped (already in yard): ${skippedExisting.length}\n`;
 
  if (skippedExisting.length) {
    msg +=
-     '\nSkipped Existing:\n' +
+     '\nSkipped (already in yard):\n' +
      skippedExisting.join('\n') +
      '\n';
  }
