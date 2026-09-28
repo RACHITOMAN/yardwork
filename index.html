@@ -1791,22 +1791,30 @@ function closeClientDetail() {
 
 function renderClientDetail(cid, tab) {
   if (!cid) return;
+  const portal = isClientPortal();
   tab = tab || 'inyard';
+  // In client portal, only allow inyard and completed tabs
+  if (portal && tab !== 'inyard' && tab !== 'completed') tab = 'inyard';
   const c = clientById(cid); if (!c) return;
   const ai = CLIENTS.filter(x=>!x.deleted).findIndex(x=>x.id===cid) % AV_BG.length;
   const txAll = DB.filter(e => !e.deleted && e.clientId === cid);
   const inYardRows = txAll.filter(e => e.op === 'unload' && !e.loaded);
+  const completedRows = txAll.filter(e => e.op === 'unload' && e.loaded).sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
   const pendingRows = txAll.filter(e => !e.invoiced && (e.op === 'cross' || (e.op === 'unload' && e.loaded)));
   const invoicedRows = txAll.filter(e => e.invoiced);
   const unpaidInvGroups = {};
   invoicedRows.filter(e => !e.paidDate && e.invoiceNo).forEach(e => { (unpaidInvGroups[e.invoiceNo] = unpaidInvGroups[e.invoiceNo] || []).push(e); });
 
-  const TABS = [
-    ['inyard', `In Yard (${inYardRows.length})`],
-    ['alltx', `All Transactions (${txAll.length})`],
-    ['pending', `Pending Invoice (${pendingRows.length})`],
-    ['invoiced', `Invoiced (${invoicedRows.length})`],
-    ['ppay', `Pending Payment (${Object.keys(unpaidInvGroups).length} invoices)`]
+  // Client portal: only 2 tabs. Admin: full 5 tabs.
+  const TABS = portal ? [
+    ['inyard',    `In Yard (${inYardRows.length})`],
+    ['completed', `Completed (${completedRows.length})`]
+  ] : [
+    ['inyard',    `In Yard (${inYardRows.length})`],
+    ['alltx',     `All Transactions (${txAll.length})`],
+    ['pending',   `Pending Invoice (${pendingRows.length})`],
+    ['invoiced',  `Invoiced (${invoicedRows.length})`],
+    ['ppay',      `Pending Payment (${Object.keys(unpaidInvGroups).length} invoices)`]
   ];
   const tabBtns = TABS.map(([id,lbl]) =>
     `<button class="cdp-tab${tab===id?' active':''}" onclick="setDetailTab('${cid}','${id}')">${lbl}</button>`
@@ -1822,6 +1830,14 @@ function renderClientDetail(cid, tab) {
     </div>` + (inYardRows.length ? yardTableWrap(inYardRows.map(e=>yardRow(e)).join('')) +
       `<div style="text-align:right;font-size:12px;color:var(--text2);margin-top:6px">Accrued storage: <strong>RO ${tS.toFixed(2)}</strong> &nbsp;|&nbsp; Total accrued: <strong>RO ${tT.toFixed(2)}</strong></div>` :
       '<div class="empty">No containers in yard for this client.</div>');
+  }
+  else if (tab === 'completed') {
+    // Client portal: completed containers (loaded out) with Excel export, no admin buttons
+    const total = completedRows.reduce((s,e) => s + calcTotal(e).total, 0);
+    const tfoot = completedRows.length ? `<tfoot><tr class="tfoot-row"><td colspan="7" style="padding:7px 8px">Total</td><td>RO ${total.toFixed(2)}</td><td colspan="3"></td></tr></tfoot>` : '';
+    bodyHtml = `<div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientCompletedExcel('${cid}')"><i class="ti ti-file-spreadsheet"></i> Export Excel</button>
+    </div>` + (completedRows.length ? tableWrap(completedRows.map(e=>entryRow(e)).join(''), tfoot) : '<div class="empty">No completed containers.</div>');
   }
   else if (tab === 'alltx') {
     const sorted = [...txAll].sort((a,b) => (b.unloadDate||b.loadDate||'').localeCompare(a.unloadDate||a.loadDate||''));
@@ -1887,11 +1903,14 @@ function renderClientDetail(cid, tab) {
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:15px">${escapeHtml(c.name)}</div>
         <div style="font-size:12px;color:var(--text2)">
-          <span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
-          <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
-          RO ${totalBilled.toFixed(2)} billed &bull;
-          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
-          ${txAll.length} total transactions
+          ${portal
+            ? `<span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull; ${completedRows.length} completed`
+            : `<span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
+               <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
+               RO ${totalBilled.toFixed(2)} billed &bull;
+               <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
+               ${txAll.length} total transactions`
+          }
         </div>
       </div>
       <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
@@ -2410,6 +2429,37 @@ function exportBillingSheet(cid) {
   ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:22},{wch:18},{wch:20},{wch:20}];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Billing');
   XLSX.writeFile(wb, `${label}_Billing_${today()}.xlsx`);
+}
+
+function exportClientCompletedExcel(cid) {
+  const c = clientById(cid);
+  const label = c ? c.name : 'Client';
+  let data = DB.filter(e => !e.deleted && e.op === 'unload' && e.loaded && e.clientId === cid);
+  data.sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
+  if (!data.length) { alert('No completed containers.'); return; }
+  let tS=0, tOp=0, tT=0;
+  const rows = data.map(e => {
+    const r = calcTotal(e);
+    tS += r.storageCost; tOp += r.opCost; tT += r.total;
+    return {
+      'Container No': e.containerNo,
+      'Gate In': fmtXl(e.unloadDate),
+      'Gate Out': fmtXl(e.loadDate),
+      'Days': r.days,
+      'Storage (RO)': parseFloat(r.storageCost.toFixed(2)),
+      'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)),
+      'Total (RO)': parseFloat(r.total.toFixed(2)),
+      'Sales Ref': e.salesRef||'',
+      'Remarks': e.remarks||''
+    };
+  });
+  rows.push({});
+  rows.push({ 'Container No':'TOTAL', 'Storage (RO)': parseFloat(tS.toFixed(2)), 'Op Charge (RO)': parseFloat(tOp.toFixed(2)), 'Total (RO)': parseFloat(tT.toFixed(2)) });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:8},{wch:15},{wch:16},{wch:14},{wch:15},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Completed');
+  XLSX.writeFile(wb, `${label}_Completed_${today()}.xlsx`);
 }
 
 function exportClientBillingExcel(cid) { exportBillingSheet(cid); }
