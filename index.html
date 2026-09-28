@@ -2401,7 +2401,7 @@ function exportClientInYardExcel(cid) {
     const r = calcTotal(e);
     tS += r.storageCost; tT += r.total;
     if (portal) {
-      return { 'Container No': e.containerNo, 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
+      return { 'Container No': e.containerNo, 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Remarks': e.remarks||'' };
     }
     return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Storage Accrued (RO)': parseFloat(r.storageCost.toFixed(2)), 'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)), 'Total Accrued (RO)': parseFloat(r.total.toFixed(2)), 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
   });
@@ -2410,7 +2410,7 @@ function exportClientInYardExcel(cid) {
     rows.push({ 'Container No':'TOTAL', 'Storage Accrued (RO)': parseFloat(tS.toFixed(2)), 'Total Accrued (RO)': parseFloat(tT.toFixed(2)) });
   }
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = portal ? [{wch:18},{wch:14},{wch:12},{wch:15},{wch:20}] : [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
+  ws['!cols'] = portal ? [{wch:18},{wch:14},{wch:12},{wch:25}] : [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'In Yard');
   XLSX.writeFile(wb, `${label}_InYard_${today()}.xlsx`);
@@ -2439,19 +2439,53 @@ function exportBillingSheet(cid) {
 function exportClientCompletedExcel(cid) {
   const c = clientById(cid);
   const label = c ? c.name : 'Client';
-  let data = DB.filter(e => !e.deleted && e.op === 'unload' && e.loaded && e.clientId === cid);
-  data.sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
+  // Include completed unloads AND cross-loads
+  let data = DB.filter(e => !e.deleted && e.clientId === cid && (
+    (e.op === 'unload' && e.loaded) || e.op === 'cross'
+  ));
   if (!data.length) { alert('No completed containers.'); return; }
-  const rows = data.map(e => ({
-    'Container No': e.containerNo,
-    'Gate In': fmtXl(e.unloadDate),
-    'Gate Out': fmtXl(e.loadDate),
-    'Days': calcTotal(e).days,
-    'Sales Ref': e.salesRef||'',
-    'Remarks': e.remarks||''
-  }));
+
+  // Group by container number to detect multiple moves
+  const groups = {};
+  data.forEach(e => {
+    const key = e.containerNo;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(e);
+  });
+
+  const rows = [];
+  // Sort containers by their earliest unload date
+  const containerKeys = Object.keys(groups).sort((a,b) => {
+    const aDate = groups[a][0].unloadDate || groups[a][0].loadDate || '';
+    const bDate = groups[b][0].unloadDate || groups[b][0].loadDate || '';
+    return bDate.localeCompare(aDate);
+  });
+
+  containerKeys.forEach(cnum => {
+    const moves = groups[cnum].sort((a,b) => (a.unloadDate||a.loadDate||'').localeCompare(b.unloadDate||b.loadDate||''));
+    const multiMove = moves.length > 1;
+
+    moves.forEach((e, idx) => {
+      const isCross = e.op === 'cross';
+      const moveLabel = multiMove ? `Move ${idx + 1}` : '';
+      const opLabel = isCross ? 'Cross-load' : '';
+      const remarksArr = [moveLabel, opLabel, e.remarks||''].filter(Boolean);
+
+      rows.push({
+        'Container No': multiMove && idx > 0 ? '' : cnum, // show container no only on first row of group
+        'Gate In':  isCross ? fmtXl(e.unloadDate) : fmtXl(e.unloadDate),
+        'Gate Out': fmtXl(e.loadDate),
+        'Days': calcTotal(e).days,
+        'Remarks': remarksArr.join(' | ')
+      });
+    });
+
+    // Blank separator row between containers that have multiple moves
+    if (multiMove) rows.push({});
+  });
+
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:8},{wch:15},{wch:20}];
+  ws['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:8},{wch:30}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Completed');
   XLSX.writeFile(wb, `${label}_Completed_${today()}.xlsx`);
