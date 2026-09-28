@@ -170,9 +170,13 @@ table tbody tr:nth-child(even) {
 
 /* Client portal mode — applied to <body> when ?client= is in URL */
 body.client-portal #topbar-right { display: none !important; }
+body.client-portal #tab-btn-all { display: none !important; }
+body.client-portal #tab-btn-pending { display: none !important; }
+body.client-portal #tab-btn-invoiced { display: none !important; }
+body.client-portal #tab-btn-payments { display: none !important; }
+body.client-portal #tab-btn-unpaid { display: none !important; }
 body.client-portal #tab-btn-clients { display: none !important; }
 body.client-portal #tab-btn-rates { display: none !important; }
-body.client-portal #tab-btn-unpaid { display: none !important; }
 body.client-portal .global-client-filter { display: none !important; }
 body.client-portal #stats { display: none !important; }
 body.client-portal .btn-danger { pointer-events: none; opacity: 0.3; }
@@ -1908,7 +1912,7 @@ function renderClientDetail(cid, tab) {
           }
         </div>
       </div>
-      <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
+      ${portal ? '' : '<button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>'}
     </div>
     <div class="cdp-tabs">${tabBtns}</div>
     <div class="cdp-body">${bodyHtml}</div>`;
@@ -2391,16 +2395,22 @@ function exportClientInYardExcel(cid) {
   let data = DB.filter(e => !e.deleted && e.op === 'unload' && !e.loaded);
   if (cid) data = data.filter(e => e.clientId === cid);
   if (!data.length) { alert('No containers in yard.'); return; }
+  const portal = isClientPortal();
   let tS=0, tT=0;
   const rows = data.map(e => {
     const r = calcTotal(e);
     tS += r.storageCost; tT += r.total;
+    if (portal) {
+      return { 'Container No': e.containerNo, 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
+    }
     return { 'Container No': e.containerNo, 'Client': clientName(e.clientId), 'Gate In': fmtXl(e.unloadDate), 'Days in Yard': r.days, 'Storage Accrued (RO)': parseFloat(r.storageCost.toFixed(2)), 'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)), 'Total Accrued (RO)': parseFloat(r.total.toFixed(2)), 'Sales Ref': e.salesRef||'', 'Remarks': e.remarks||'' };
   });
-  rows.push({});
-  rows.push({ 'Container No':'TOTAL', 'Storage Accrued (RO)': parseFloat(tS.toFixed(2)), 'Total Accrued (RO)': parseFloat(tT.toFixed(2)) });
+  if (!portal) {
+    rows.push({});
+    rows.push({ 'Container No':'TOTAL', 'Storage Accrued (RO)': parseFloat(tS.toFixed(2)), 'Total Accrued (RO)': parseFloat(tT.toFixed(2)) });
+  }
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
+  ws['!cols'] = portal ? [{wch:18},{wch:14},{wch:12},{wch:15},{wch:20}] : [{wch:18},{wch:25},{wch:14},{wch:12},{wch:22},{wch:18},{wch:20},{wch:15},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'In Yard');
   XLSX.writeFile(wb, `${label}_InYard_${today()}.xlsx`);
@@ -2432,26 +2442,16 @@ function exportClientCompletedExcel(cid) {
   let data = DB.filter(e => !e.deleted && e.op === 'unload' && e.loaded && e.clientId === cid);
   data.sort((a,b) => (b.loadDate||'').localeCompare(a.loadDate||''));
   if (!data.length) { alert('No completed containers.'); return; }
-  let tS=0, tOp=0, tT=0;
-  const rows = data.map(e => {
-    const r = calcTotal(e);
-    tS += r.storageCost; tOp += r.opCost; tT += r.total;
-    return {
-      'Container No': e.containerNo,
-      'Gate In': fmtXl(e.unloadDate),
-      'Gate Out': fmtXl(e.loadDate),
-      'Days': r.days,
-      'Storage (RO)': parseFloat(r.storageCost.toFixed(2)),
-      'Op Charge (RO)': parseFloat(r.opCost.toFixed(2)),
-      'Total (RO)': parseFloat(r.total.toFixed(2)),
-      'Sales Ref': e.salesRef||'',
-      'Remarks': e.remarks||''
-    };
-  });
-  rows.push({});
-  rows.push({ 'Container No':'TOTAL', 'Storage (RO)': parseFloat(tS.toFixed(2)), 'Op Charge (RO)': parseFloat(tOp.toFixed(2)), 'Total (RO)': parseFloat(tT.toFixed(2)) });
+  const rows = data.map(e => ({
+    'Container No': e.containerNo,
+    'Gate In': fmtXl(e.unloadDate),
+    'Gate Out': fmtXl(e.loadDate),
+    'Days': calcTotal(e).days,
+    'Sales Ref': e.salesRef||'',
+    'Remarks': e.remarks||''
+  }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:8},{wch:15},{wch:16},{wch:14},{wch:15},{wch:20}];
+  ws['!cols'] = [{wch:18},{wch:14},{wch:14},{wch:8},{wch:15},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Completed');
   XLSX.writeFile(wb, `${label}_Completed_${today()}.xlsx`);
@@ -2582,7 +2582,7 @@ function hideLoading() {
     document.body.classList.add('client-portal');
 
     // Also hide explicitly as belt-and-braces
-    ['topbar-right','tab-btn-clients','tab-btn-rates','tab-btn-unpaid'].forEach(id => {
+    ['topbar-right','tab-btn-all','tab-btn-pending','tab-btn-invoiced','tab-btn-payments','tab-btn-unpaid','tab-btn-clients','tab-btn-rates'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.setProperty('display','none','important');
     });
@@ -2602,7 +2602,31 @@ function hideLoading() {
         </div>`;
     }
 
-    render();
+    // Portal mode: hide ALL tab buttons and ALL tab content panels, then show only a clean container
+    document.querySelectorAll('.tab').forEach(t => t.style.setProperty('display','none','important'));
+    ['yard','all','pending','invoiced','payments','unpaid','clients','rates'].forEach(t => {
+      const el2 = document.getElementById('tab-' + t);
+      if (el2) el2.style.setProperty('display','none','important');
+    });
+
+    // Create a clean full-page container for the client detail panel
+    let portalContainer = document.getElementById('portal-container');
+    if (!portalContainer) {
+      portalContainer = document.createElement('div');
+      portalContainer.id = 'portal-container';
+      portalContainer.style.cssText = 'padding:16px;max-width:1100px;margin:0 auto';
+      document.querySelector('.main') ? document.querySelector('.main').appendChild(portalContainer) :
+        document.body.appendChild(portalContainer);
+    }
+
+    if (globalClientFilter) {
+      // Temporarily move client-detail-panel into portal container
+      portalContainer.innerHTML = '<div id="client-detail-panel" class="client-detail-panel"></div>';
+      renderClientDetail(globalClientFilter, 'inyard');
+    } else {
+      portalContainer.innerHTML = '<div class="empty" style="padding:2rem">No client data found for this link.</div>';
+    }
+
     return;
   }
 
