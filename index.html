@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Yard Container Tracker</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
-<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"></noscript>
 <style>
 :root {
   --bg: #ffffff;
@@ -1757,7 +1757,7 @@ function renderClients() {
         <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
           <button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')"><i class="ti ti-file-spreadsheet"></i> In-Yard XLS</button>
           <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')"><i class="ti ti-layout-list"></i> Detail</button>
-          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.name}')" title="Copy portal link for this client"><i class="ti ti-link"></i> Client Link</button>
+          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.id}')" title="Copy portal link for this client"><i class="ti ti-link"></i> Client Link</button>
           <button class="btn btn-sm" onclick="openClientModal('${c.id}')"><i class="ti ti-edit"></i></button>
           <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')"><i class="ti ti-trash"></i></button>
         </div>
@@ -1969,24 +1969,41 @@ function switchTab(tab, el) {
 }
 function applyUrlClientFilter() {
   // Support both hash (#client=NAME) and query string (?client=NAME)
-  let clientName = new URLSearchParams(window.location.search).get('client');
-  if (!clientName) {
+  let clientParam = new URLSearchParams(window.location.search).get('client');
+  if (!clientParam) {
     const hashMatch = window.location.hash.match(/^#client=(.+)$/);
-    if (hashMatch) clientName = decodeURIComponent(hashMatch[1]);
+    if (hashMatch) clientParam = decodeURIComponent(hashMatch[1]);
   }
-  if (!clientName) return;
-  const client = CLIENTS.find(c => !c.deleted && c.name.toUpperCase() === clientName.toUpperCase());
+  if (!clientParam) return;
+  const param = clientParam.trim();
+  // Try ID match first (new links use client ID — reliable, no encoding issues)
+  let client = CLIENTS.find(c => !c.deleted && c.id === param);
+  // Fall back to name match for old links that used client name
+  if (!client) client = CLIENTS.find(c => !c.deleted && c.name.trim().toUpperCase() === param.toUpperCase());
   if (!client) {
     // In client portal mode, an unrecognised name must NEVER show all data — blank the screen
     if (isClientPortal()) {
-      document.body.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc;">
-          <div style="font-size:48px;">🔒</div>
-          <div style="font-size:20px;font-weight:600;color:#1e293b;">Link Not Valid</div>
-          <div style="font-size:14px;color:#64748b;text-align:center;max-width:320px;">
-            This portal link is no longer valid. Please contact the yard office for an updated link.
-          </div>
-        </div>`;
+      // If CLIENTS is empty, this is a load failure — not an invalid link
+      if (!CLIENTS.length) {
+        document.body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc;">
+            <div style="font-size:48px;">⚠️</div>
+            <div style="font-size:20px;font-weight:600;color:#1e293b;">Unable to Load</div>
+            <div style="font-size:14px;color:#64748b;text-align:center;max-width:320px;">
+              Could not connect to the server. Please check your internet connection and
+              <a href="javascript:location.reload()" style="color:#1D9E75">try again</a>.
+            </div>
+          </div>`;
+      } else {
+        document.body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc;">
+            <div style="font-size:48px;">🔒</div>
+            <div style="font-size:20px;font-weight:600;color:#1e293b;">Link Not Valid</div>
+            <div style="font-size:14px;color:#64748b;text-align:center;max-width:320px;">
+              This portal link is no longer valid. Please contact the yard office for an updated link.
+            </div>
+          </div>`;
+      }
     }
     return;
   }
@@ -2047,7 +2064,8 @@ async function syncNow() {
   render();
   alert('Data synchronized');
 }
-function exportBillingSheet() {
+async function exportBillingSheet() {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
 
   let data =
     DB.filter(e =>
@@ -2161,7 +2179,8 @@ rows.push({
   );
 
 }
-function exportPendingInvoiceSummary() {
+async function exportPendingInvoiceSummary() {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
 
   const summary = {};
 
@@ -2389,7 +2408,20 @@ function renderUnpaidTable() {
 /* ── Excel exports ── */
 function fmtXl(d) { return d ? fmt(d) : ''; }
 
-function exportClientInYardExcel(cid) {
+// Lazy-load SheetJS only when first export is triggered
+function ensureXLSX() {
+  return new Promise((resolve, reject) => {
+    if (window.XLSX) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Failed to load Excel library. Check your internet connection.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportClientInYardExcel(cid) {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
   const c = clientById(cid);
   const label = c ? c.name : 'All Clients';
   let data = DB.filter(e => !e.deleted && e.op === 'unload' && !e.loaded);
@@ -2416,7 +2448,8 @@ function exportClientInYardExcel(cid) {
   XLSX.writeFile(wb, `${label}_InYard_${today()}.xlsx`);
 }
 
-function exportBillingSheet(cid) {
+async function exportBillingSheet(cid) {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
   let data = DB.filter(e => !e.deleted && !e.invoiced && (e.loaded || e.op === 'cross'));
   const cidToUse = cid || globalClientFilter;
   if (cidToUse) data = data.filter(e => e.clientId === cidToUse);
@@ -2436,7 +2469,8 @@ function exportBillingSheet(cid) {
   XLSX.writeFile(wb, `${label}_Billing_${today()}.xlsx`);
 }
 
-function exportClientCompletedExcel(cid) {
+async function exportClientCompletedExcel(cid) {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
   const c = clientById(cid);
   const label = c ? c.name : 'Client';
   // Include completed unloads AND cross-loads
@@ -2493,7 +2527,8 @@ function exportClientCompletedExcel(cid) {
 
 function exportClientBillingExcel(cid) { exportBillingSheet(cid); }
 
-function exportPendingPaymentExcel() {
+async function exportPendingPaymentExcel() {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
   let data = filterByClient(DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && !e.paidDate));
   const groups = {};
   data.forEach(e => { (groups[e.invoiceNo] = groups[e.invoiceNo] || []).push(e); });
@@ -2510,7 +2545,8 @@ function exportPendingPaymentExcel() {
   XLSX.writeFile(wb, `Pending_Payment_Summary_${today()}.xlsx`);
 }
 
-function exportClientPendingPaymentExcel(cid) {
+async function exportClientPendingPaymentExcel(cid) {
+  try { await ensureXLSX(); } catch(e) { alert(e.message); return; }
   const c = clientById(cid);
   const data = DB.filter(e => !e.deleted && e.invoiced && e.invoiceNo && e.clientId === cid && !e.paidDate);
   const groups = {};
@@ -2538,19 +2574,21 @@ function savePaidDate() {
 }
 
 
-function copyClientLink(clientName) {
-  const url = 'https://rachitoman.github.io/yardwork/#client=' + encodeURIComponent(clientName);
+function copyClientLink(clientId) {
+  const c = clientById(clientId);
+  const displayName = c ? c.name : clientId;
+  // Use client ID in URL — immune to name changes, spaces, special characters
+  const url = 'https://rachitoman.github.io/yardwork/#client=' + encodeURIComponent(clientId);
   navigator.clipboard.writeText(url).then(() => {
-    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + displayName + '. They will only see their own containers.');
   }).catch(() => {
-    // Fallback for older browsers
     const ta = document.createElement('textarea');
     ta.value = url;
     document.body.appendChild(ta);
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
-    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + clientName + '. They will only see their own containers.');
+    alert('Client portal link copied!\n\n' + url + '\n\nSend this link to ' + displayName + '. They will only see their own containers.');
   });
 }
 
@@ -2607,8 +2645,21 @@ function hideLoading() {
 (async function(){
   // ── Client portal: check URL FIRST before any network call ──
   if (isClientPortal()) {
-    document.getElementById('loading-msg').textContent = 'Loading your containers…';
-    await loadData(true); // skipLock — client portal never participates in lock
+    // Show client name from URL immediately while fetching
+    const _hashMatch = window.location.hash.match(/^#client=(.+)$/);
+    const _clientLabel = new URLSearchParams(window.location.search).get('client') ||
+      (_hashMatch ? decodeURIComponent(_hashMatch[1]) : '');
+    const _loadingMsg = document.getElementById('loading-msg');
+    if (_loadingMsg) _loadingMsg.textContent = _clientLabel ? `Loading containers for ${_clientLabel}…` : 'Loading your containers…';
+
+    // Try loading data — retry once on failure or empty result (Apps Script cold-start)
+    await loadData(true);
+    if (!CLIENTS.length) {
+      if (_loadingMsg) _loadingMsg.textContent = 'Retrying…';
+      await new Promise(r => setTimeout(r, 1500));
+      await loadData(true);
+    }
+
     hideLoading();
     populateClientDropdowns();
     applyUrlClientFilter();
@@ -2621,14 +2672,12 @@ function hideLoading() {
       if (el) el.style.setProperty('display','none','important');
     });
 
-    // Replace topbar-left with clean client header
+    // Replace topbar-left with clean client header — show actual client name, not URL param
     const topbarLeft = document.querySelector('.topbar-left');
     if (topbarLeft) {
-      let clientLabel = new URLSearchParams(window.location.search).get('client');
-      if (!clientLabel) {
-        const hashMatch = window.location.hash.match(/^#client=(.+)$/);
-        if (hashMatch) clientLabel = decodeURIComponent(hashMatch[1]);
-      }
+      // globalClientFilter is now set, so look up the real name
+      const _portalClient = globalClientFilter ? clientById(globalClientFilter) : null;
+      const clientLabel = _portalClient ? _portalClient.name : _clientLabel;
       topbarLeft.innerHTML = `
         <div>
           <div style="font-size:16px;font-weight:500">📦 Yard Container Tracker</div>
