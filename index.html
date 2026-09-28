@@ -1958,7 +1958,20 @@ function applyUrlClientFilter() {
   }
   if (!clientName) return;
   const client = CLIENTS.find(c => !c.deleted && c.name.toUpperCase() === clientName.toUpperCase());
-  if (!client) return;
+  if (!client) {
+    // In client portal mode, an unrecognised name must NEVER show all data — blank the screen
+    if (isClientPortal()) {
+      document.body.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc;">
+          <div style="font-size:48px;">🔒</div>
+          <div style="font-size:20px;font-weight:600;color:#1e293b;">Link Not Valid</div>
+          <div style="font-size:14px;color:#64748b;text-align:center;max-width:320px;">
+            This portal link is no longer valid. Please contact the yard office for an updated link.
+          </div>
+        </div>`;
+    }
+    return;
+  }
   globalClientFilter = client.id;
   const filter = document.getElementById('global-client-filter');
   if (filter) filter.value = client.id;
