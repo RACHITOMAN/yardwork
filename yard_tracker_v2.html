@@ -6,269 +6,162 @@
 <title>Yard Container Tracker</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" media="print" onload="this.media='all'">
 <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"></noscript>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
-:root {
-  --bg: #ffffff;
-  --bg2: #f5f5f4;
-  --bg3: #eeede9;
-  --text: #1a1a1a;
-  --text2: #6b6b6b;
-  --text3: #9b9b9b;
-  --border: rgba(0,0,0,0.12);
-  --border2: rgba(0,0,0,0.22);
-  --radius: 8px;
-  --radius-lg: 12px;
-  --info-bg: #E6F1FB;
-  --info-text: #0C447C;
-  --success-bg: #E1F5EE;
-  --success-text: #085041;
-  --warn-bg: #FAEEDA;
-  --warn-text: #633806;
-  --danger-bg: #FCEBEB;
-  --danger-text: #A32D2D;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1c1c;
-    --bg2: #252525;
-    --bg3: #2e2e2e;
-    --text: #f0f0f0;
-    --text2: #a0a0a0;
-    --text3: #666;
-    --border: rgba(255,255,255,0.1);
-    --border2: rgba(255,255,255,0.2);
-  }
-}
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: var(--text); background: var(--bg3); min-height: 100vh; }
-.topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 56px; position: sticky; top: 0; z-index: 10; }
-.topbar-left { display: flex; align-items: center; gap: 16px; }
-.app-title { font-size: 16px; font-weight: 500; }
-.today-label { font-size: 12px; color: var(--text2); }
-.topbar-right { display: flex; align-items: center; gap: 10px; }
-.container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1rem; }
-.stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 1.25rem; }
-.stat { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem; text-align: center; }
-.stat-num { font-size: 22px; font-weight: 500; margin-top: 3px; }
-.stat-label { font-size: 11px; color: var(--text2); }
-.tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 1.25rem; background: var(--bg); border-radius: var(--radius-lg) var(--radius-lg) 0 0; padding: 0 0.5rem; overflow-x: auto; }
-.tab { padding: 10px 18px; cursor: pointer; font-size: 13px; color: var(--text2); border-bottom: 2px solid transparent; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; }
-.tab.active { color: var(--text); border-bottom: 2px solid var(--text); font-weight: 500; }
-.card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
-.section-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
-.field label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; }
-.field input, .field select, .field textarea { width: 100%; padding: 8px 10px; font-size: 14px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); outline: none; }
-.field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
-.field textarea { height: 58px; resize: vertical; }
-.btn { padding: 7px 14px; font-size: 13px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); color: var(--text); cursor: pointer; font-weight: 500; transition: background 0.1s; }
-.btn:hover { background: var(--bg2); }
-.btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
-.btn-primary:hover { opacity: 0.85; }
-.btn-client { background: #2563eb; color: #fff; border: none; }
-.btn-bulk { background: #16a34a; color: #fff; border: none; }
-.btn-sm { padding: 3px 9px; font-size: 12px; }
-.btn-danger { border-color: #E24B4A; color: #A32D2D; }
-.btn-danger:hover { background: #FCEBEB; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; padding: 7px 8px; font-weight: 700; font-size: 14px; color: #000; background: #e2e2e2; border-bottom: 0.5px solid var(--border); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
-td { padding: 7px 8px; border-bottom: 0.5px solid var(--border); vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-.tfoot-row td { font-weight: 500; background: var(--bg2); }
-.badge { display: inline-block; padding: 4px 10px; border-radius: var(--radius); font-size: 13px; font-weight: 600; }
-.badge-in { background: #E1F5EE; color: #085041; }
-.badge-out { background: #EAF3DE; color: #27500A; }
-.badge-cross { background: #EEEDFE; color: #3C3489; }
-.badge-warn { background: #FAEEDA; color: #633806; }
-.badge-inv { background: #E6F1FB; color: #0C447C; }
-.badge-paid { background: #E3F6E8; color: #1D7A3C; cursor: pointer; }
-.badge-unpaid { background: #FDECEC; color: #B3261E; cursor: pointer; }
-.row-warn { background: rgba(250,238,218,0.3); }
-table tbody tr:nth-child(even) { background: #ebebeb; }
-.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
-.filter-bar input, .filter-bar select { padding: 6px 10px; font-size: 13px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
-.empty { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
-.sep { height: 0.5px; background: var(--border); margin: 1rem 0; }
-.op-row { display: flex; gap: 8px; margin-bottom: 1rem; }
-.op-btn { flex: 1; padding: 9px 4px; border: 0.5px solid var(--border2); border-radius: var(--radius); cursor: pointer; text-align: center; font-size: 12px; background: var(--bg); color: var(--text2); }
-.op-btn.sel-unload { border-color: #1D9E75; background: #E1F5EE; color: #085041; font-weight: 500; }
-.op-btn.sel-cross { border-color: #7F77DD; background: #EEEDFE; color: #3C3489; font-weight: 500; }
-.info-box { padding: 8px 10px; border-radius: var(--radius); font-size: 12px; margin-top: 8px; background: var(--bg2); color: var(--text2); }
-.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; }
-.modal-overlay.open { display: flex; }
-.modal { background: var(--bg); border-radius: var(--radius-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: 460px; max-width: 96vw; max-height: 90vh; overflow-y: auto; }
-.modal-title { font-size: 16px; font-weight: 500; margin-bottom: 1rem; }
-.modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1rem; }
-.client-avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; flex-shrink: 0; }
-.client-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
-.client-row:last-child { border-bottom: none; }
-.client-summary { font-size: 12px; color: var(--text2); margin-top: 2px; }
-.overflow-x { overflow-x: auto; }
-
-/* Login screen */
-#login-screen { display:flex; position:fixed; inset:0; background:var(--bg3); z-index:999; align-items:center; justify-content:center; }
-.login-card { background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); padding:2.5rem 2rem; max-width:380px; width:90%; box-shadow:0 8px 32px rgba(0,0,0,0.12); }
-.login-icon { font-size:40px; margin-bottom:1rem; text-align:center; }
-.login-title { font-size:20px; font-weight:600; margin-bottom:0.25rem; text-align:center; }
-.login-sub { font-size:13px; color:var(--text2); margin-bottom:1.5rem; text-align:center; }
-.login-error { margin-top:8px; padding:8px 10px; background:var(--danger-bg); color:var(--danger-text); border-radius:var(--radius); font-size:13px; }
-
-/* Client portal overrides */
-body.client-portal .admin-only { display: none !important; }
-
-/* Client detail panel */
-.client-detail-panel { border:0.5px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; margin-top:1rem; background:var(--bg); }
-.cdp-header { display:flex; align-items:center; gap:12px; padding:1rem 1.25rem; border-bottom:0.5px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
-.cdp-tabs { display:flex; border-bottom:0.5px solid var(--border); padding:0 1rem; overflow-x:auto; background:var(--bg); }
-.cdp-tab { padding:8px 14px; cursor:pointer; font-size:12px; color:var(--text2); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; white-space:nowrap; }
-.cdp-tab.active { color:var(--text); border-bottom:2px solid var(--text); font-weight:500; }
-.cdp-body { padding:1rem 1.25rem; }
-
-@media (max-width: 600px) {
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
-  .grid2 { grid-template-columns: 1fr; }
-  .grid3 { grid-template-columns: 1fr; }
-  .topbar { padding: 0 1rem; }
-  .container { padding: 1rem 0.5rem; }
-}
+:root{--bg:#ffffff;--bg2:#f5f5f4;--bg3:#eeede9;--text:#1a1a1a;--text2:#6b6b6b;--border:rgba(0,0,0,0.12);--border2:rgba(0,0,0,0.22);--radius:8px;--radius-lg:12px}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1c1c;--bg2:#252525;--bg3:#2e2e2e;--text:#f0f0f0;--text2:#a0a0a0;--border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.2)}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--text);background:var(--bg3);min-height:100vh}
+.topbar{background:var(--bg);border-bottom:0.5px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:10}
+.app-title{font-size:16px;font-weight:500}
+.today-label{font-size:12px;color:var(--text2)}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.container{max-width:1100px;margin:0 auto;padding:1.5rem 1rem}
+.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:1.25rem}
+.stat{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius);padding:1rem;text-align:center;cursor:pointer;transition:box-shadow .15s}
+.stat:hover{box-shadow:0 0 0 2px #2563eb44}
+.stat-num{font-size:22px;font-weight:500;margin-top:3px}
+.stat-label{font-size:11px;color:var(--text2)}
+.tabs{display:flex;border-bottom:0.5px solid var(--border);background:var(--bg);border-radius:var(--radius-lg) var(--radius-lg) 0 0;padding:0 .5rem;overflow-x:auto}
+.tab{padding:10px 16px;cursor:pointer;font-size:13px;color:var(--text2);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap}
+.tab.active{color:var(--text);border-bottom:2px solid var(--text);font-weight:500}
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1.25rem;margin-bottom:1rem}
+.field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);outline:none}
+.field input:focus,.field select:focus,.field textarea:focus{box-shadow:0 0 0 2px rgba(0,0,0,.15)}
+.field textarea{height:58px;resize:vertical}
+.btn{padding:7px 14px;font-size:13px;border-radius:var(--radius);border:0.5px solid var(--border2);background:var(--bg);color:var(--text);cursor:pointer;font-weight:500;transition:background .1s}
+.btn:hover{background:var(--bg2)}
+.btn-primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+.btn-primary:hover{opacity:.85}
+.btn-client{background:#2563eb;color:#fff;border:none}
+.btn-bulk{background:#16a34a;color:#fff;border:none}
+.btn-sm{padding:3px 9px;font-size:12px}
+.btn-danger{border-color:#E24B4A;color:#A32D2D}
+.btn-danger:hover{background:#FCEBEB}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:7px 8px;font-weight:700;font-size:14px;color:#000;background:#e2e2e2;border-bottom:0.5px solid var(--border);white-space:nowrap;position:sticky;top:0;z-index:1}
+td{padding:7px 8px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tfoot-row td{font-weight:500;background:var(--bg2)}
+tbody tr:nth-child(even){background:#ebebeb}
+.badge{display:inline-block;padding:4px 10px;border-radius:var(--radius);font-size:13px;font-weight:600}
+.badge-in{background:#E1F5EE;color:#085041}
+.badge-out{background:#EAF3DE;color:#27500A}
+.badge-cross{background:#EEEDFE;color:#3C3489}
+.badge-inv{background:#E6F1FB;color:#0C447C}
+.badge-paid{background:#E3F6E8;color:#1D7A3C;cursor:pointer}
+.badge-unpaid{background:#FDECEC;color:#B3261E;cursor:pointer}
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
+.filter-bar input,.filter-bar select{padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)}
+.empty{text-align:center;padding:2rem;color:var(--text2);font-size:13px}
+.op-row{display:flex;gap:8px;margin-bottom:10px}
+.op-btn{flex:1;padding:9px 4px;border:0.5px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-size:12px;background:var(--bg);color:var(--text2)}
+.op-btn.sel-unload{border-color:#1D9E75;background:#E1F5EE;color:#085041;font-weight:500}
+.op-btn.sel-cross{border-color:#7F77DD;background:#EEEDFE;color:#3C3489;font-weight:500}
+.overflow-x{overflow-x:auto}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg);border-radius:var(--radius-lg);border:0.5px solid var(--border);padding:1.5rem;width:460px;max-width:96vw;max-height:90vh;overflow-y:auto}
+.modal-title{font-size:16px;font-weight:500;margin-bottom:1rem}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:1rem}
+.info-box{padding:8px 10px;border-radius:var(--radius);font-size:12px;margin-top:8px;background:var(--bg2);color:var(--text2)}
+.client-avatar{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0}
+.client-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--border)}
+.client-row:last-child{border-bottom:none}
+.client-summary{font-size:12px;color:var(--text2);margin-top:2px}
+.client-detail-panel{border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-top:1rem;background:var(--bg)}
+.cdp-header{display:flex;align-items:center;gap:12px;padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);background:var(--bg2);flex-wrap:wrap}
+.cdp-tabs{display:flex;border-bottom:0.5px solid var(--border);padding:0 1rem;overflow-x:auto}
+.cdp-tab{padding:8px 14px;cursor:pointer;font-size:12px;color:var(--text2);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap}
+.cdp-tab.active{color:var(--text);border-bottom:2px solid var(--text);font-weight:500}
+.cdp-body{padding:1rem 1.25rem}
+#login-screen{display:flex;position:fixed;inset:0;background:var(--bg3);z-index:999;align-items:center;justify-content:center}
+.login-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem 2rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.login-title{font-size:20px;font-weight:600;margin-bottom:.25rem;text-align:center}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:1.5rem;text-align:center}
+@media(max-width:600px){.stats-grid{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}.topbar{padding:0 1rem}.container{padding:1rem .5rem}}
 </style>
 </head>
 <body>
-
-<!-- LOGIN SCREEN -->
+<!-- Login -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-icon">📦</div>
+    <div style="text-align:center;font-size:40px;margin-bottom:1rem">📦</div>
     <div class="login-title">Yard Container Tracker</div>
     <div class="login-sub">Sign in to continue</div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Email</label>
-      <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
-    </div>
-    <div class="field" style="margin-bottom:12px">
-      <label>Password</label>
-      <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-    </div>
-    <button class="btn btn-primary" id="login-btn" style="width:100%;padding:10px">Sign in</button>
-    <div id="login-error" class="login-error" style="display:none"></div>
+    <div class="field" style="margin-bottom:10px"><label>Email</label><input id="login-email" type="email" placeholder="you@example.com" autocomplete="username"></div>
+    <div class="field" style="margin-bottom:16px"><label>Password</label><input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;padding:8px 10px;border-radius:var(--radius);font-size:13px;margin-bottom:12px"></div>
+    <button class="btn btn-primary" style="width:100%;padding:10px" onclick="doLogin()">Sign In</button>
   </div>
 </div>
-
-<!-- LOADING -->
+<!-- Loading -->
 <div id="loading-screen" style="display:none;position:fixed;inset:0;background:var(--bg3);z-index:998;align-items:center;justify-content:center;flex-direction:column;gap:12px">
   <div style="font-size:32px">📦</div>
-  <div style="font-size:16px;font-weight:500">Yard Container Tracker</div>
-  <div style="font-size:13px;color:var(--text2)">Loading data…</div>
+  <div style="font-size:16px;font-weight:500">Loading data…</div>
 </div>
-
-<!-- MAIN APP -->
+<!-- Main App -->
 <div id="app" style="display:none">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div>
-        <div class="app-title"><i class="ti ti-container"></i> Yard Container Tracker</div>
-        <div class="today-label" id="today-label"></div>
-      </div>
-    </div>
-    <div class="topbar-right">
-      <span id="sync-status" style="font-size:12px;color:var(--text2);min-width:70px;text-align:right"></span>
-      <select id="global-client-filter" onchange="applyGlobalFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)" class="admin-only">
-        <option value="">All clients</option>
-      </select>
-      <button class="btn btn-client admin-only" onclick="openClientModal()"><i class="ti ti-user-plus"></i> Add Client</button>
-      <button class="btn btn-primary admin-only" onclick="openAddModal()"><i class="ti ti-plus"></i> New Entry</button>
-      <button class="btn btn-bulk admin-only" onclick="openBulkModal()"><i class="ti ti-stack-2"></i> Bulk Entry</button>
-      <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
-    </div>
+<div class="topbar">
+  <div>
+    <div class="app-title">📦 Yard Container Tracker</div>
+    <div class="today-label" id="today-label"></div>
   </div>
-
-  <div class="container">
-    <div class="stats-grid admin-only" id="stats"></div>
-
-    <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-      <div class="tabs" id="tabs">
-        <button class="tab active" onclick="switchTab('yard',this)" id="tab-btn-yard">In Yard</button>
-        <button class="tab admin-only" onclick="switchTab('pending',this)" id="tab-btn-pending">Pending Invoice</button>
-        <button class="tab admin-only" onclick="switchTab('invoiced',this)" id="tab-btn-invoiced">Invoiced</button>
-        <button class="tab admin-only" onclick="switchTab('payments',this)" id="tab-btn-payments">Pending Payment</button>
-        <button class="tab admin-only" onclick="switchTab('completed',this)" id="tab-btn-completed">Completed</button>
-        <button class="tab admin-only" onclick="switchTab('clients',this)" id="tab-btn-clients">Clients</button>
-        <button class="tab admin-only" onclick="switchTab('rates',this)" id="tab-btn-rates">Rate Sheet</button>
-      </div>
-      <div style="padding:1.25rem">
-        <div id="tab-yard"></div>
-        <div id="tab-pending" style="display:none"></div>
-        <div id="tab-invoiced" style="display:none"></div>
-        <div id="tab-payments" style="display:none"></div>
-        <div id="tab-completed" style="display:none"></div>
-        <div id="tab-clients" style="display:none"></div>
-        <div id="tab-rates" style="display:none"></div>
-      </div>
+  <div class="topbar-right">
+    <span id="sync-status" style="font-size:12px;color:var(--text2);min-width:60px;text-align:right"></span>
+    <select id="global-client-filter" onchange="applyClientFilter()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      <option value="">All clients</option>
+    </select>
+    <button class="btn" onclick="syncNow()">Sync</button>
+    <button class="btn btn-client" onclick="openClientModal(null)">+ Add Client</button>
+    <button class="btn btn-primary" onclick="openAddModal()">+ New Entry</button>
+    <button class="btn btn-bulk" onclick="openBulkModal()">⊞ Bulk Entry</button>
+    <button class="btn" onclick="doLogout()">Sign Out</button>
+  </div>
+</div>
+<div class="container">
+  <div class="stats-grid" id="stats"></div>
+  <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div class="tabs">
+      <button id="tab-btn-yard"     class="tab active" onclick="switchTab('yard',this)">In Yard</button>
+      <button id="tab-btn-all"      class="tab"        onclick="switchTab('all',this)">All Transactions</button>
+      <button id="tab-btn-pending"  class="tab"        onclick="switchTab('pending',this)">Pending Invoice</button>
+      <button id="tab-btn-invoiced" class="tab"        onclick="switchTab('invoiced',this)">Invoiced</button>
+      <button id="tab-btn-payments" class="tab"        onclick="switchTab('payments',this)">Pending Payment</button>
+      <button id="tab-btn-unpaid"   class="tab"        onclick="switchTab('unpaid',this)">Unpaid Invoices</button>
+      <button id="tab-btn-clients"  class="tab"        onclick="switchTab('clients',this)">Clients</button>
+      <button id="tab-btn-rates"    class="tab"        onclick="switchTab('rates',this)">Rate Sheet</button>
+    </div>
+    <div style="padding:1.25rem">
+      <div id="tab-yard"></div>
+      <div id="tab-all"      style="display:none"></div>
+      <div id="tab-pending"  style="display:none"></div>
+      <div id="tab-invoiced" style="display:none"></div>
+      <div id="tab-payments" style="display:none"></div>
+      <div id="tab-unpaid"   style="display:none"></div>
+      <div id="tab-clients"  style="display:none"></div>
+      <div id="tab-rates"    style="display:none"></div>
     </div>
   </div>
 </div>
-
-<!-- CLIENT PORTAL (non-admin) -->
-<div id="client-portal" style="display:none">
-  <div class="topbar">
-    <div class="topbar-left">
-      <div>
-        <div class="app-title"><i class="ti ti-container"></i> Yard Container Tracker</div>
-        <div class="today-label" id="portal-client-name"></div>
-      </div>
-    </div>
-    <div class="topbar-right">
-      <button class="btn" onclick="doLogout()"><i class="ti ti-logout"></i> Sign out</button>
-    </div>
-  </div>
-  <div class="container">
-    <div style="background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
-      <div class="tabs">
-        <button class="tab active" onclick="switchPortalTab('in-yard',this)">In Yard</button>
-        <button class="tab" onclick="switchPortalTab('completed',this)">Completed</button>
-      </div>
-      <div style="padding:1.25rem">
-        <div id="portal-in-yard"></div>
-        <div id="portal-completed" style="display:none"></div>
-      </div>
-    </div>
-  </div>
 </div>
 
-<!-- ═══ MODALS ═══ -->
-
-<!-- Add Entry -->
+<!-- Add Modal -->
 <div id="modal-add" class="modal-overlay">
   <div class="modal">
     <div class="modal-title">New container entry</div>
     <div class="op-row">
-      <button class="op-btn sel-unload" id="btn-unload" onclick="setOp('unload')"><i class="ti ti-arrow-bar-to-down"></i> Unloading</button>
-      <button class="op-btn" id="btn-cross" onclick="setOp('cross')"><i class="ti ti-arrows-exchange"></i> Cross-loading</button>
+      <button class="op-btn" id="btn-unload" onclick="setOp('unload')">↓ Unloading</button>
+      <button class="op-btn" id="btn-cross"  onclick="setOp('cross')">⇄ Cross-loading</button>
     </div>
     <div class="grid2" style="margin-bottom:10px">
-      <div class="field">
-        <label>Container no.</label>
-        <input id="f-cnum" placeholder="e.g. MSCU1234567" style="text-transform:uppercase">
-      </div>
-      <div class="field">
-        <label>Gate In Date</label>
-        <input id="f-date" type="date">
-      </div>
+      <div class="field"><label>Container no.</label><input id="f-cnum" placeholder="MSCU1234567" style="text-transform:uppercase"></div>
+      <div class="field"><label>Date</label><input id="f-date" type="date"></div>
     </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Client</label>
-      <select id="f-client"><option value="">— Select client —</option></select>
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Sales Ref</label>
-      <input id="f-salesref" placeholder="Sales person">
-    </div>
-    <div class="field">
-      <label>Remarks</label>
-      <textarea id="f-remarks" placeholder="Optional notes"></textarea>
-    </div>
+    <div class="field" style="margin-bottom:10px"><label>Client</label><select id="f-client"><option value="">— Select client —</option></select></div>
+    <div class="field" style="margin-bottom:10px"><label>Sales Ref</label><input id="f-salesref" placeholder="Sales person"></div>
+    <div class="field"><label>Remarks</label><textarea id="f-remarks" placeholder="Optional notes"></textarea></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-add')">Cancel</button>
       <button class="btn btn-primary" onclick="saveEntry()">Save entry</button>
@@ -276,29 +169,23 @@ body.client-portal .admin-only { display: none !important; }
   </div>
 </div>
 
-<!-- Bulk Entry -->
+<!-- Bulk Entry Modal -->
 <div id="modal-bulk" class="modal-overlay">
   <div class="modal">
     <div class="modal-title">Bulk Container Entry</div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Client</label>
-      <select id="bulk-client"></select>
+    <div class="op-row">
+      <button class="op-btn" id="bulk-btn-unload" onclick="setBulkOp('unload')">↓ Unloading</button>
+      <button class="op-btn" id="bulk-btn-cross"  onclick="setBulkOp('cross')">⇄ Cross-loading</button>
     </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Sales Ref</label>
-      <input id="bulk-salesref" placeholder="Sales person">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Default Gate In Date</label>
-      <input id="bulk-date" type="date">
-    </div>
-    <div class="field">
-      <label>Container Numbers (one per line)</label>
-      <textarea id="bulk-list" style="height:180px" placeholder="REGU1235760&#10;REGU3228672&#10;TGBU8071201"></textarea>
-    </div>
+    <div class="field" style="margin-bottom:10px"><label>Client</label><select id="bulk-client"></select></div>
+    <div class="field" style="margin-bottom:10px"><label>Sales Ref</label><input id="bulk-salesref" placeholder="Sales person"></div>
+    <div class="field" style="margin-bottom:10px"><label>Default Gate In Date</label><input id="bulk-date" type="date"></div>
+    <div class="field"><label>Container Numbers (one per line)</label><textarea id="bulk-list" style="height:180px" placeholder="REGU1235760&#10;REGU3228672&#10;TGBU8071201"></textarea></div>
+    <button class="btn" style="margin-top:8px" onclick="generateBulkRows()">Generate Preview</button>
+    <div id="bulk-preview" style="margin-top:10px"></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-bulk')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveBulkEntries()">Save All</button>
+      <button class="btn btn-primary" id="bulk-save-btn" style="display:none" onclick="saveBulkEntries()">Save All</button>
     </div>
   </div>
 </div>
@@ -307,102 +194,10 @@ body.client-portal .admin-only { display: none !important; }
 <div id="modal-client" class="modal-overlay">
   <div class="modal">
     <div class="modal-title" id="client-modal-title">Add Client</div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Client Name</label>
-      <input id="cl-name" placeholder="Company or person name">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Contact / Phone</label>
-      <input id="cl-contact" placeholder="Optional">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Email</label>
-      <input id="cl-email" placeholder="Optional">
-    </div>
-    <div class="grid2" style="margin-bottom:10px">
-      <div class="field">
-        <label>Storage Rate (RO/day)</label>
-        <input id="cl-rate-storage" type="number" step="0.1" value="1.5">
-      </div>
-      <div class="field">
-        <label>Operation Rate (RO)</label>
-        <input id="cl-rate-op" type="number" step="1" value="25">
-      </div>
-    </div>
+    <div class="field"><label>Client Name</label><input id="cl-name" placeholder="Company or person name"></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-client')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveClient()">Save Client</button>
-    </div>
-  </div>
-</div>
-
-<!-- Client Login Modal -->
-<div id="modal-client-login" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-title">Create Client Portal Login</div>
-    <div style="font-size:13px;color:var(--text2);margin-bottom:1rem" id="client-login-for"></div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Email</label>
-      <input id="cl-login-email" type="email" placeholder="client@example.com">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Password</label>
-      <input id="cl-login-pass" type="password" placeholder="At least 6 characters">
-    </div>
-    <div id="cl-login-error" style="display:none;margin-top:8px;padding:8px 10px;background:var(--danger-bg);color:var(--danger-text);border-radius:var(--radius);font-size:13px"></div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeModal('modal-client-login')">Cancel</button>
-      <button class="btn btn-primary" id="cl-login-save-btn" onclick="saveClientLogin()">Create Login</button>
-    </div>
-  </div>
-</div>
-
-<!-- Mark Loaded Modal -->
-<div id="modal-load" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-title">Mark Container Loaded</div>
-    <div class="field">
-      <label>Load Date</label>
-      <input id="load-date" type="date">
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeModal('modal-load')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveLoadedDate()">Save</button>
-    </div>
-  </div>
-</div>
-
-<!-- Edit Entry Modal -->
-<div id="modal-edit" class="modal-overlay">
-  <div class="modal">
-    <div class="modal-title">Edit Entry</div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Container No.</label>
-      <input id="edit-cnum" type="text">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Client</label>
-      <select id="edit-client"></select>
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Sales Ref</label>
-      <input id="edit-salesref" type="text">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Gate In Date</label>
-      <input id="edit-unload-date" type="date">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Load Date <span style="font-size:11px;color:var(--text2)">(leave blank if still in yard)</span></label>
-      <input id="edit-load-date" type="date">
-    </div>
-    <div class="field" style="margin-bottom:10px">
-      <label>Remarks</label>
-      <textarea id="edit-remarks"></textarea>
-    </div>
-    <div class="modal-btns">
-      <button class="btn" onclick="closeModal('modal-edit')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveEdit()">Save</button>
+      <button class="btn btn-primary" onclick="saveClient()">Save</button>
     </div>
   </div>
 </div>
@@ -410,15 +205,41 @@ body.client-portal .admin-only { display: none !important; }
 <!-- Invoice Modal -->
 <div id="modal-invoice" class="modal-overlay">
   <div class="modal">
-    <div class="modal-title">Mark as Invoiced</div>
-    <div class="field">
-      <label>Invoice Number</label>
-      <input id="inv-num" placeholder="e.g. INV-2024-001">
-    </div>
-    <div class="info-box" id="inv-desc" style="margin-top:8px"></div>
+    <div class="modal-title">Mark as invoiced</div>
+    <div class="field"><label>Invoice number</label><input id="inv-num" placeholder="INV-2024-001"></div>
+    <div class="info-box" id="inv-desc"></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-invoice')">Cancel</button>
       <button class="btn btn-primary" onclick="saveInvoice()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Load Modal -->
+<div id="modal-load" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Mark Container Loaded</div>
+    <div class="field"><label>Load Date</label><input id="load-date" type="date"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-load')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLoadedDate()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="modal-edit" class="modal-overlay">
+  <div class="modal">
+    <div class="modal-title">Edit Entry</div>
+    <div class="field" style="margin-bottom:10px"><label>Container No.</label><input id="edit-cnum" type="text"></div>
+    <div class="field" style="margin-bottom:10px"><label>Client</label><select id="edit-client"></select></div>
+    <div class="field" style="margin-bottom:10px"><label>Sales Ref</label><input id="edit-salesref" type="text"></div>
+    <div class="field" style="margin-bottom:10px"><label>Unload Date</label><input id="edit-unload-date" type="date"></div>
+    <div class="field" style="margin-bottom:10px"><label>Load Date</label><input id="edit-load-date" type="date"></div>
+    <div class="field"><label>Remarks</label><textarea id="edit-remarks"></textarea></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-edit')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditedEntry()">Save</button>
     </div>
   </div>
 </div>
@@ -427,10 +248,7 @@ body.client-portal .admin-only { display: none !important; }
 <div id="modal-paid" class="modal-overlay">
   <div class="modal">
     <div class="modal-title">Mark Invoice Paid</div>
-    <div class="field">
-      <label>Payment Date</label>
-      <input id="paid-date" type="date">
-    </div>
+    <div class="field"><label>Payment Date</label><input id="paid-date" type="date"></div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-paid')">Cancel</button>
       <button class="btn btn-primary" onclick="savePaidDate()">Save</button>
@@ -438,722 +256,967 @@ body.client-portal .admin-only { display: none !important; }
   </div>
 </div>
 
-<script>
-// ─── Supabase Init ───────────────────────────────────────────────────────────
-if (!window.supabase) {
-  document.getElementById('login-screen').innerHTML = '<div style="text-align:center;padding:3rem;font-family:sans-serif"><div style="font-size:40px;margin-bottom:1rem">⚠️</div><div style="font-size:18px;font-weight:600;margin-bottom:0.5rem">Failed to load app</div><div style="color:#666;margin-bottom:1.5rem">Check your internet connection and try again.</div><button onclick="location.reload()" style="padding:10px 24px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer">Retry</button></div>';
-  throw new Error('Supabase not loaded');
-}
-const SUPABASE_URL = 'https://lngzmcdyyrlxchfkwbds.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ptY2R5eXJseGNoZmt3YmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU4ODEsImV4cCI6MjEwNjQ0MTg4MX0.cOFC6WKW-GnC_H2NuY3D2gmo-62UF4swrprpeyJJf04';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// ─── State ───────────────────────────────────────────────────────────────────
-let currentUser = null;
-let isAdmin = false;
-let portalClientRecord = null;
-let allTransactions = [];
-let allClients = [];
-let currentTab = 'yard';
-let currentOp = 'unload';
-let editingClientId = null;
-let currentLoadId = null;
-let currentEditId = null;
-let pendingInvIds = new Set();
-let clientLoginForId = null;
-const AV_BG = ['#E1F5EE','#EEEDFE','#E6F1FB','#FAEEDA','#FAECE7','#EAF3DE','#FBEAF0'];
-const AV_TX = ['#085041','#3C3489','#0C447C','#633806','#712B13','#27500A','#72243E'];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function today() { return new Date().toISOString().split('T')[0]; }
-function parseDate(s) { if (!s) return null; return new Date(s + 'T00:00:00'); }
-function daysBetween(a, b) {
-  if (!a) return 0;
-  const d1 = parseDate(a), d2 = b ? parseDate(b) : new Date();
-  return Math.max(0, Math.floor((d2 - d1) / 86400000));
-}
-function fmtDate(s) {
-  if (!s) return '—';
-  const d = parseDate(s);
-  return d ? d.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—';
-}
-function fmtRO(n) { return 'RO ' + Number(n||0).toFixed(3); }
-function clientName(id) { const c = allClients.find(c => c.id === id); return c ? c.name : '—'; }
-function escHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function avatarStyle(name) {
-  const i = name ? (name.charCodeAt(0) % AV_BG.length) : 0;
-  return `background:${AV_BG[i]};color:${AV_TX[i]}`;
-}
-function initials(name) { if (!name) return '?'; const p = name.trim().split(/\s+/); return (p[0][0]+(p[1]?p[1][0]:'')).toUpperCase(); }
-function calcStorage(tx) {
-  const c = allClients.find(c => c.id === tx.client_id);
-  const rate = c ? (parseFloat(c.rate_storage)||1.5) : 1.5;
-  return daysBetween(tx.unload_date, tx.load_date||null) * rate;
-}
-function calcOp(tx) {
-  const c = allClients.find(c => c.id === tx.client_id);
-  return c ? (parseFloat(c.rate_op)||25) : 25;
-}
-function calcTotal(tx) { return calcStorage(tx) + calcOp(tx); }
-function setSyncStatus(s) {
-  const el = document.getElementById('sync-status');
-  if (!el) return;
-  if (s === 'saving') el.textContent = 'Saving…';
-  else if (s === 'saved') { el.textContent = 'Saved ✓'; setTimeout(()=>{ if(el.textContent==='Saved ✓') el.textContent=''; },1500); }
-  else if (s === 'error') el.textContent = 'Error!';
-  else el.textContent = '';
-}
-function showLoading(v) { document.getElementById('loading-screen').style.display = v ? 'flex' : 'none'; }
-
-// ─── Modal helpers ────────────────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
-// ─── Login ────────────────────────────────────────────────────────────────────
-document.getElementById('login-btn').addEventListener('click', doLogin);
-document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-
-async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const errEl = document.getElementById('login-error');
-  const btn = document.getElementById('login-btn');
-  errEl.style.display = 'none';
-  if (!email || !password) { errEl.textContent = 'Please enter email and password.'; errEl.style.display = 'block'; return; }
-  btn.disabled = true; btn.textContent = 'Signing in…';
-  try {
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { errEl.textContent = error.message; errEl.style.display = 'block'; return; }
-    await onLogin(data.user);
-  } catch(e) {
-    errEl.textContent = 'Login failed. Please try again.'; errEl.style.display = 'block';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Sign in';
-  }
-}
-
-async function onLogin(user) {
-  currentUser = user;
-  showLoading(true);
-  document.getElementById('login-screen').style.display = 'none';
-
-  // Check admin
-  const { data: adminRow } = await sb.from('admin_users').select('*').eq('user_id', user.id).maybeSingle();
-  if (adminRow) {
-    isAdmin = true;
-    await loadAllData();
-    document.getElementById('today-label').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-    showLoading(false);
-    document.getElementById('app').style.display = 'block';
-    renderStats();
-    renderTab('yard');
-    return;
-  }
-
-  // Check client
-  const { data: clientUserRow } = await sb.from('client_users').select('*, clients(*)').eq('user_id', user.id).maybeSingle();
-  if (clientUserRow && clientUserRow.clients) {
-    portalClientRecord = clientUserRow.clients;
-    await loadAllData();
-    showLoading(false);
-    document.getElementById('portal-client-name').textContent = portalClientRecord.name;
-    document.getElementById('client-portal').style.display = 'block';
-    renderPortalTab('in-yard');
-    return;
-  }
-
-  showLoading(false);
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('login-error').textContent = 'Account not authorised. Contact admin.';
-  document.getElementById('login-error').style.display = 'block';
-  await sb.auth.signOut();
-}
-
-async function doLogout() {
-  await sb.auth.signOut();
-  location.reload();
-}
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-async function loadAllData() {
-  const [{ data: txs }, { data: cls }] = await Promise.all([
-    sb.from('transactions').select('*').eq('deleted', false).order('created_at', { ascending: false }),
-    sb.from('clients').select('*').eq('deleted', false).order('name')
-  ]);
-  allTransactions = txs || [];
-  allClients = cls || [];
-  rebuildClientFilter();
-}
-
-async function reload() {
-  setSyncStatus('saving');
-  await loadAllData();
-  setSyncStatus('saved');
-  renderTab(currentTab);
-  renderStats();
-}
-
-// ─── Client filter dropdown ───────────────────────────────────────────────────
-function rebuildClientFilter() {
-  const sel = document.getElementById('global-client-filter');
-  if (!sel) return;
-  const val = sel.value;
-  sel.innerHTML = '<option value="">All clients</option>' +
-    allClients.map(c => `<option value="${c.id}"${c.id===val?' selected':''}>${escHtml(c.name)}</option>`).join('');
-}
-function applyGlobalFilter() { renderTab(currentTab); }
-function getFilteredTx() {
-  const f = document.getElementById('global-client-filter');
-  const fid = f ? f.value : '';
-  return fid ? allTransactions.filter(t => t.client_id === fid) : allTransactions;
-}
-
-// ─── Stats ────────────────────────────────────────────────────────────────────
-function renderStats() {
-  const inYard = allTransactions.filter(t => !t.loaded);
-  const pending = allTransactions.filter(t => t.loaded && !t.invoiced);
-  const invoiced = allTransactions.filter(t => t.invoiced && !t.paid_date);
-  const paid = allTransactions.filter(t => t.paid_date);
-  const totalRevenue = allTransactions.filter(t => t.paid_date).reduce((s,t) => s+calcTotal(t), 0);
-  const outstanding = allTransactions.filter(t => t.invoiced && !t.paid_date).reduce((s,t) => s+calcTotal(t), 0);
-  document.getElementById('stats').innerHTML = [
-    ['In Yard', inYard.length, ''],
-    ['Pending Invoice', pending.length, ''],
-    ['Invoiced (Unpaid)', invoiced.length, ''],
-    ['Total Paid', paid.length, ''],
-    ['Outstanding', fmtRO(outstanding), ''],
-    ['Total Revenue', fmtRO(totalRevenue), ''],
-  ].map(([l,n,_]) => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-num">${n}</div></div>`).join('');
-}
-
-// ─── Tab switching ────────────────────────────────────────────────────────────
-function switchTab(name, btn) {
-  currentTab = name;
-  document.querySelectorAll('#tabs .tab').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  ['yard','pending','invoiced','payments','completed','clients','rates'].forEach(t => {
-    document.getElementById('tab-'+t).style.display = t === name ? '' : 'none';
-  });
-  renderTab(name);
-}
-
-function renderTab(name) {
-  if (name === 'yard') renderYard();
-  else if (name === 'pending') renderPending();
-  else if (name === 'invoiced') renderInvoiced();
-  else if (name === 'payments') renderPayments();
-  else if (name === 'completed') renderCompleted();
-  else if (name === 'clients') renderClients();
-  else if (name === 'rates') renderRates();
-}
-
-// ─── IN YARD ──────────────────────────────────────────────────────────────────
-function renderYard() {
-  const txs = getFilteredTx().filter(t => !t.loaded);
-  const el = document.getElementById('tab-yard');
-  if (!txs.length) { el.innerHTML = '<div class="empty">No containers currently in yard.</div>'; return; }
-  el.innerHTML = `<div class="overflow-x"><table>
-    <thead><tr>
-      <th>Container</th><th>Client</th><th>Op</th><th>Gate In</th><th>Days</th><th>Sales Ref</th><th>Remarks</th><th>Storage</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${txs.map(t => {
-      const days = daysBetween(t.unload_date);
-      const warn = days > 30;
-      return `<tr class="${warn?'row-warn':''}">
-        <td><strong>${escHtml(t.container_no)}</strong></td>
-        <td>${escHtml(clientName(t.client_id))}</td>
-        <td><span class="badge badge-${t.op==='cross'?'cross':'in'}">${t.op==='cross'?'Cross':'Unload'}</span></td>
-        <td>${fmtDate(t.unload_date)}</td>
-        <td>${warn?`<span class="badge badge-warn">${days}d</span>`:days+'d'}</td>
-        <td>${escHtml(t.sales_ref||'')}</td>
-        <td>${escHtml(t.remarks||'')}</td>
-        <td>${fmtRO(calcStorage(t))}</td>
-        <td>
-          <button class="btn btn-sm btn-primary admin-only" onclick="openLoadModal('${t.id}')">Mark Loaded</button>
-          <button class="btn btn-sm admin-only" onclick="openEditModal('${t.id}')">Edit</button>
-          <button class="btn btn-sm btn-danger admin-only" onclick="deleteEntry('${t.id}')">Delete</button>
-        </td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table></div>`;
-}
-
-// ─── PENDING INVOICE ──────────────────────────────────────────────────────────
-function renderPending() {
-  const txs = getFilteredTx().filter(t => t.loaded && !t.invoiced);
-  const el = document.getElementById('tab-pending');
-  if (!txs.length) { el.innerHTML = '<div class="empty">No containers pending invoice.</div>'; return; }
-  const total = txs.reduce((s,t) => s+calcTotal(t), 0);
-  el.innerHTML = `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn btn-primary admin-only" onclick="bulkInvoiceSelected()">Invoice Selected</button>
-    <span style="font-size:13px;color:var(--text2);align-self:center">Total: ${fmtRO(total)}</span>
+<!-- Bulk Load Modal -->
+<div id="modal-bulk-load" class="modal-overlay">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">Mark Containers Loaded</div>
+    <div id="bulk-load-rows" style="max-height:320px;overflow-y:auto;margin-bottom:10px"></div>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal('modal-bulk-load')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBulkLoad()">Save all</button>
+    </div>
   </div>
-  <div class="overflow-x"><table>
-    <thead><tr>
-      <th><input type="checkbox" id="check-all-pending" onchange="toggleAllPending(this)"></th>
-      <th>Container</th><th>Client</th><th>Op</th><th>Gate In</th><th>Gate Out</th><th>Days</th><th>Storage</th><th>Op Fee</th><th>Total</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${txs.map(t => `<tr>
-      <td><input type="checkbox" class="inv-check" data-id="${t.id}"></td>
-      <td><strong>${escHtml(t.container_no)}</strong></td>
-      <td>${escHtml(clientName(t.client_id))}</td>
-      <td><span class="badge badge-${t.op==='cross'?'cross':'in'}">${t.op==='cross'?'Cross':'Unload'}</span></td>
-      <td>${fmtDate(t.unload_date)}</td>
-      <td>${fmtDate(t.load_date)}</td>
-      <td>${daysBetween(t.unload_date, t.load_date)}d</td>
-      <td>${fmtRO(calcStorage(t))}</td>
-      <td>${fmtRO(calcOp(t))}</td>
-      <td><strong>${fmtRO(calcTotal(t))}</strong></td>
-      <td><button class="btn btn-sm btn-primary admin-only" onclick="openInvModal('${t.id}')">Invoice</button></td>
-    </tr>`).join('')}</tbody>
-    <tfoot><tr class="tfoot-row"><td colspan="9" style="text-align:right">Total:</td><td>${fmtRO(total)}</td><td></td></tr></tfoot>
-  </table></div>`;
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL='https://lngzmcdyyrlxchfkwbds.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ptY2R5eXJseGNoZmt3YmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU4ODEsImV4cCI6MjEwNjQ0MTg4MX0.cOFC6WKW-GnC_H2NuY3D2gmo-62UF4swrprpeyJJf04';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const STORAGE_RATE=3, OP_UNLOAD=15, OP_CROSS=20;
+const AV_BG=['#E1F5EE','#EEEDFE','#E6F1FB','#FAEEDA','#FAECE7','#EAF3DE','#FBEAF0'];
+const AV_TX=['#085041','#3C3489','#0C447C','#633806','#712B13','#27500A','#72243E'];
+
+let DB=[],CLIENTS=[],currentTab='yard',globalClientFilter='';
+let currentOp='unload',bulkOp='unload';
+let editingClientId=null,pendingInvEntry=null,currentLoadId=null,currentEditId=null;
+let selectedInvoices=new Set(),selectedLoad=new Set(),currentPaidIds=[];
+
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function today(){const d=new Date();d.setDate(d.getDate()-1);return d.toISOString().slice(0,10)}
+function fmt(d){if(!d)return'–';return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}
+function fmtXl(d){return d?fmt(d):''}
+function clientById(id){return CLIENTS.find(c=>c.id===id)||null}
+function clientName(id){const c=clientById(id);return c?c.name:'–'}
+function avIdx(id){const i=CLIENTS.filter(c=>!c.deleted).findIndex(c=>c.id===id);return i<0?0:i%AV_BG.length}
+function initials(n){return n.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}
+function filterByCl(data){return globalClientFilter?data.filter(e=>e.clientId===globalClientFilter):data}
+
+function calcStorage(a,b){
+  if(a&&b&&a===b)return{days:0,cost:0};
+  const da=new Date(a+'T00:00:00');
+  const db=b?new Date(b+'T00:00:00'):new Date(today()+'T00:00:00');
+  const days=Math.max(1,Math.ceil((db-da)/864e5));
+  return{days,cost:days*STORAGE_RATE};
+}
+function calcTotal(e){
+  if(e.op==='cross')return{days:0,storageCost:0,opCost:OP_CROSS,total:OP_CROSS};
+  const{days,cost}=calcStorage(e.unloadDate,e.loadDate||null);
+  const opCost=e.loaded?OP_UNLOAD*2:OP_UNLOAD;
+  return{days,storageCost:cost,opCost,total:cost+opCost};
 }
 
-function toggleAllPending(cb) {
-  document.querySelectorAll('.inv-check').forEach(c => c.checked = cb.checked);
-}
-function bulkInvoiceSelected() {
-  const ids = [...document.querySelectorAll('.inv-check:checked')].map(c => c.dataset.id);
-  if (!ids.length) { alert('Select at least one container.'); return; }
-  pendingInvIds = new Set(ids);
-  document.getElementById('inv-desc').textContent = `${ids.length} container(s) will be invoiced together.`;
-  document.getElementById('inv-num').value = '';
-  openModal('modal-invoice');
+function setSyncStatus(s){
+  const el=document.getElementById('sync-status');if(!el)return;
+  if(s==='saving')el.textContent='Saving…';
+  else if(s==='saved'){el.textContent='Saved ✓';setTimeout(()=>{if(el.textContent==='Saved ✓')el.textContent=''},1500)}
+  else if(s==='error')el.textContent='Error!';
+  else el.textContent='';
 }
 
-// ─── INVOICED ─────────────────────────────────────────────────────────────────
-function renderInvoiced() {
-  const txs = getFilteredTx().filter(t => t.invoiced && !t.paid_date);
-  const el = document.getElementById('tab-invoiced');
-  if (!txs.length) { el.innerHTML = '<div class="empty">No invoiced containers awaiting payment.</div>'; return; }
-  const total = txs.reduce((s,t) => s+calcTotal(t), 0);
-  el.innerHTML = `<div class="overflow-x"><table>
-    <thead><tr>
-      <th>Container</th><th>Client</th><th>Invoice #</th><th>Gate In</th><th>Gate Out</th><th>Days</th><th>Total</th><th>Status</th><th>Actions</th>
-    </tr></thead>
-    <tbody>${txs.map(t => `<tr>
-      <td><strong>${escHtml(t.container_no)}</strong></td>
-      <td>${escHtml(clientName(t.client_id))}</td>
-      <td>${escHtml(t.invoice_no||'—')}</td>
-      <td>${fmtDate(t.unload_date)}</td>
-      <td>${fmtDate(t.load_date)}</td>
-      <td>${daysBetween(t.unload_date, t.load_date)}d</td>
-      <td><strong>${fmtRO(calcTotal(t))}</strong></td>
-      <td><span class="badge badge-inv">Invoiced</span></td>
-      <td>
-        <button class="btn btn-sm btn-primary admin-only" onclick="openPaidModal('${t.id}')">Mark Paid</button>
-        <button class="btn btn-sm admin-only" onclick="unmarkInvoice('${t.id}')">Undo Invoice</button>
-      </td>
-    </tr>`).join('')}</tbody>
-    <tfoot><tr class="tfoot-row"><td colspan="6" style="text-align:right">Total:</td><td>${fmtRO(total)}</td><td colspan="2"></td></tr></tfoot>
-  </table></div>`;
+function rowToEntry(r){
+  return{id:r.id,containerNo:r.container_no,op:r.op,unloadDate:r.unload_date,loaded:r.loaded,loadDate:r.load_date,clientId:r.client_id,salesRef:r.sales_ref,remarks:r.remarks,invoiceNo:r.invoice_no,invoiced:r.invoiced,paidDate:r.paid_date,deleted:r.deleted,createdAt:r.created_at};
+}
+function rowToClient(r){return{id:r.id,name:r.name,deleted:r.deleted||false}}
+
+async function loadData(){
+  const[txRes,clRes]=await Promise.all([
+    sb.from('transactions').select('*').eq('deleted',false).order('created_at',{ascending:false}),
+    sb.from('clients').select('*').eq('deleted',false).order('name')
+  ]);
+  if(txRes.error)throw txRes.error;
+  if(clRes.error)throw clRes.error;
+  DB=(txRes.data||[]).map(rowToEntry);
+  CLIENTS=(clRes.data||[]).map(rowToClient);
 }
 
-// ─── PENDING PAYMENT ──────────────────────────────────────────────────────────
-function renderPayments() {
-  const txs = getFilteredTx().filter(t => t.invoiced && !t.paid_date);
-  renderInvoiced(); // same data, reuse invoiced tab for now — in payments tab
-  const el = document.getElementById('tab-payments');
-  if (!txs.length) { el.innerHTML = '<div class="empty">No pending payments.</div>'; return; }
-  // Group by client
-  const byClient = {};
-  txs.forEach(t => {
-    if (!byClient[t.client_id]) byClient[t.client_id] = [];
-    byClient[t.client_id].push(t);
+async function syncNow(){
+  setSyncStatus('saving');
+  try{await loadData();populateClientDropdowns();render();setSyncStatus('saved')}
+  catch(e){setSyncStatus('error');alert('Sync error: '+e.message)}
+}
+
+async function doLogin(){
+  const email=document.getElementById('login-email').value.trim();
+  const password=document.getElementById('login-password').value;
+  const errEl=document.getElementById('login-error');errEl.style.display='none';
+  if(!email||!password){errEl.textContent='Enter email and password.';errEl.style.display='block';return}
+  const{data,error}=await sb.auth.signInWithPassword({email,password});
+  if(error){errEl.textContent=error.message||'Invalid email or password.';errEl.style.display='block';return}
+  await startApp(data.user);
+}
+
+async function doLogout(){await sb.auth.signOut();location.reload()}
+
+async function startApp(user){
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('loading-screen').style.display='flex';
+  await loadData();
+  document.getElementById('loading-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('today-label').textContent='Today: '+fmt(today());
+  populateClientDropdowns();
+  applyUrlClientFilter();
+  render();
+}
+
+function populateClientDropdowns(){
+  const sorted=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
+  const baseOpt='<option value="">— Select client —</option>';
+  ['f-client','bulk-client','edit-client'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    const prev=el.value;
+    el.innerHTML=(id==='bulk-client'?'<option value="">— Select client —</option>':baseOpt)+sorted.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    if(prev)el.value=prev;
   });
-  el.innerHTML = Object.entries(byClient).map(([cid, ts]) => {
-    const c = allClients.find(x => x.id === cid);
-    const total = ts.reduce((s,t) => s+calcTotal(t), 0);
-    return `<div class="card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-        <div class="client-avatar" style="${avatarStyle(c?.name||'')}">${initials(c?.name||'?')}</div>
-        <div><div style="font-weight:500">${escHtml(c?.name||'Unknown')}</div>
-        <div class="client-summary">${ts.length} invoice(s) · ${fmtRO(total)}</div></div>
-      </div>
-      <table><thead><tr><th>Container</th><th>Invoice #</th><th>Gate In</th><th>Gate Out</th><th>Days</th><th>Total</th><th>Actions</th></tr></thead>
-      <tbody>${ts.map(t => `<tr>
-        <td>${escHtml(t.container_no)}</td>
-        <td>${escHtml(t.invoice_no||'—')}</td>
-        <td>${fmtDate(t.unload_date)}</td><td>${fmtDate(t.load_date)}</td>
-        <td>${daysBetween(t.unload_date,t.load_date)}d</td>
-        <td><strong>${fmtRO(calcTotal(t))}</strong></td>
-        <td><button class="btn btn-sm btn-primary admin-only" onclick="openPaidModal('${t.id}')">Mark Paid</button></td>
-      </tr>`).join('')}</tbody></table>
-    </div>`;
-  }).join('');
+  const gf=document.getElementById('global-client-filter');
+  if(gf){gf.innerHTML='<option value="">All clients</option>'+sorted.map(c=>`<option value="${c.id}"${globalClientFilter===c.id?' selected':''}>${esc(c.name)}</option>`).join('');}
 }
 
-// ─── COMPLETED ────────────────────────────────────────────────────────────────
-function renderCompleted() {
-  const txs = getFilteredTx().filter(t => t.paid_date);
-  const el = document.getElementById('tab-completed');
-  if (!txs.length) { el.innerHTML = '<div class="empty">No completed transactions.</div>'; return; }
-  const total = txs.reduce((s,t) => s+calcTotal(t), 0);
-  el.innerHTML = `<div class="overflow-x"><table>
-    <thead><tr>
-      <th>Container</th><th>Client</th><th>Invoice #</th><th>Gate In</th><th>Gate Out</th><th>Days</th><th>Total</th><th>Paid</th>
-    </tr></thead>
-    <tbody>${txs.map(t => `<tr>
-      <td><strong>${escHtml(t.container_no)}</strong></td>
-      <td>${escHtml(clientName(t.client_id))}</td>
-      <td>${escHtml(t.invoice_no||'—')}</td>
-      <td>${fmtDate(t.unload_date)}</td>
-      <td>${fmtDate(t.load_date)}</td>
-      <td>${daysBetween(t.unload_date,t.load_date)}d</td>
-      <td><strong>${fmtRO(calcTotal(t))}</strong></td>
-      <td><span class="badge badge-paid">${fmtDate(t.paid_date)}</span></td>
-    </tr>`).join('')}</tbody>
-    <tfoot><tr class="tfoot-row"><td colspan="6" style="text-align:right">Total:</td><td>${fmtRO(total)}</td><td></td></tr></tfoot>
-  </table></div>`;
+function applyClientFilter(){globalClientFilter=document.getElementById('global-client-filter').value;render()}
+
+function applyUrlClientFilter(){
+  let p=new URLSearchParams(window.location.search).get('client');
+  if(!p){const m=window.location.hash.match(/^#client=(.+)$/);if(m)p=decodeURIComponent(m[1])}
+  if(!p)return;
+  const c=CLIENTS.find(x=>!x.deleted&&(x.id===p||x.name.trim().toUpperCase()===p.trim().toUpperCase()));
+  if(!c)return;
+  globalClientFilter=c.id;
+  const el=document.getElementById('global-client-filter');if(el)el.value=c.id;
 }
 
-// ─── CLIENTS ──────────────────────────────────────────────────────────────────
-function renderClients() {
-  const el = document.getElementById('tab-clients');
-  if (!allClients.length) { el.innerHTML = '<div class="empty">No clients yet.</div>'; return; }
-  el.innerHTML = allClients.map(c => {
-    const inYard = allTransactions.filter(t => t.client_id===c.id && !t.loaded).length;
-    const outstanding = allTransactions.filter(t => t.client_id===c.id && t.invoiced && !t.paid_date).reduce((s,t)=>s+calcTotal(t),0);
-    return `<div class="client-row">
-      <div class="client-avatar" style="${avatarStyle(c.name)}">${initials(c.name)}</div>
-      <div style="flex:1">
-        <div style="font-weight:500">${escHtml(c.name)}</div>
-        <div class="client-summary">${inYard} in yard · Outstanding: ${fmtRO(outstanding)}${c.contact?' · '+escHtml(c.contact):''}</div>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-sm" onclick="openEditClient('${c.id}')">Edit</button>
-        <button class="btn btn-sm btn-client" onclick="openClientLoginModal('${c.id}')">Portal Login</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">Delete</button>
-      </div>
-    </div>`;
-  }).join('');
+function closeModal(id){document.getElementById(id).classList.remove('open')}
+
+function setOp(op){
+  currentOp=op;
+  ['unload','cross'].forEach(o=>{document.getElementById('btn-'+o).className='op-btn'+(o===op?' sel-'+o:'')});
+}
+function setBulkOp(op){
+  bulkOp=op;
+  ['unload','cross'].forEach(o=>{document.getElementById('bulk-btn-'+o).className='op-btn'+(o===op?' sel-'+o:'')});
 }
 
-// ─── RATES ────────────────────────────────────────────────────────────────────
-function renderRates() {
-  const el = document.getElementById('tab-rates');
-  el.innerHTML = `<div class="overflow-x"><table>
-    <thead><tr><th>Client</th><th>Storage Rate (RO/day)</th><th>Operation Rate (RO)</th><th>Actions</th></tr></thead>
-    <tbody>${allClients.map(c => `<tr>
-      <td>${escHtml(c.name)}</td>
-      <td>${Number(c.rate_storage||1.5).toFixed(3)}</td>
-      <td>${Number(c.rate_op||25).toFixed(3)}</td>
-      <td><button class="btn btn-sm" onclick="openEditClient('${c.id}')">Edit</button></td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+function openAddModal(){
+  document.getElementById('f-cnum').value='';
+  document.getElementById('f-salesref').value='';
+  document.getElementById('f-remarks').value='';
+  document.getElementById('f-date').value=today();
+  document.getElementById('f-client').value=globalClientFilter||'';
+  setOp('unload');
+  document.getElementById('modal-add').classList.add('open');
 }
+document.getElementById('f-cnum').addEventListener('input',function(){this.value=this.value.toUpperCase()});
 
-// ─── Add Entry ────────────────────────────────────────────────────────────────
-function openAddModal() {
-  currentOp = 'unload';
-  document.getElementById('btn-unload').className = 'op-btn sel-unload';
-  document.getElementById('btn-cross').className = 'op-btn';
-  document.getElementById('f-cnum').value = '';
-  document.getElementById('f-date').value = today();
-  document.getElementById('f-salesref').value = '';
-  document.getElementById('f-remarks').value = '';
-  const sel = document.getElementById('f-client');
-  sel.innerHTML = '<option value="">— Select client —</option>' +
-    allClients.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
-  openModal('modal-add');
-}
-function setOp(op) {
-  currentOp = op;
-  document.getElementById('btn-unload').className = 'op-btn' + (op==='unload'?' sel-unload':'');
-  document.getElementById('btn-cross').className = 'op-btn' + (op==='cross'?' sel-cross':'');
-}
-async function saveEntry() {
-  const cnum = document.getElementById('f-cnum').value.trim().toUpperCase();
-  const date = document.getElementById('f-date').value;
-  const cid = document.getElementById('f-client').value;
-  const sref = document.getElementById('f-salesref').value.trim();
-  const rem = document.getElementById('f-remarks').value.trim();
-  if (!cnum || !date || !cid) { alert('Container number, date and client are required.'); return; }
+async function saveEntry(){
+  const cnum=document.getElementById('f-cnum').value.toUpperCase().trim();
+  const date=document.getElementById('f-date').value;
+  const clientId=document.getElementById('f-client').value;
+  const salesRef=document.getElementById('f-salesref').value.trim();
+  const remarks=document.getElementById('f-remarks').value.trim();
+  if(!cnum||!date||!clientId){alert('Container number, date and client are required.');return}
+  if(!/^[A-Z]{4}[0-9]{7}$/.test(cnum)){alert('Container number must be 4 letters + 7 digits.');return}
+  const isCross=currentOp==='cross';
+  if(!isCross){
+    const dup=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&e.containerNo===cnum);
+    if(dup){alert('Container '+cnum+' is already in the yard.');return}
+  }
   setSyncStatus('saving');
-  const { error } = await sb.from('transactions').insert({
-    container_no: cnum, op: currentOp, unload_date: date,
-    client_id: cid, sales_ref: sref||null, remarks: rem||null,
-    loaded: false, invoiced: false, deleted: false
+  const{data,error}=await sb.from('transactions').insert({container_no:cnum,op:currentOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks,invoice_no:null,invoiced:false,paid_date:null,deleted:false}).select().single();
+  if(error){setSyncStatus('error');alert('Save error: '+error.message);return}
+  DB.unshift(rowToEntry(data));
+  closeModal('modal-add');setSyncStatus('saved');render();
+}
+
+function openBulkModal(){
+  document.getElementById('bulk-list').value='';
+  document.getElementById('bulk-date').value=today();
+  document.getElementById('bulk-salesref').value='';
+  document.getElementById('bulk-client').innerHTML=document.getElementById('f-client').innerHTML;
+  document.getElementById('bulk-client').value=globalClientFilter||'';
+  document.getElementById('bulk-preview').innerHTML='';
+  document.getElementById('bulk-save-btn').style.display='none';
+  setBulkOp('unload');
+  document.getElementById('modal-bulk').classList.add('open');
+}
+
+function generateBulkRows(){
+  const defaultDate=document.getElementById('bulk-date').value;
+  const lines=document.getElementById('bulk-list').value.split('\n').map(x=>x.trim().toUpperCase()).filter(Boolean);
+  if(!lines.length){alert('Enter at least one container number.');return}
+  let html='<div style="max-height:250px;overflow-y:auto"><table><thead><tr><th>Container</th><th>Date</th></tr></thead><tbody>';
+  lines.forEach((cnum,i)=>{
+    html+=`<tr><td><strong>${esc(cnum)}</strong></td><td><input type="date" id="bulk-row-date-${i}" value="${defaultDate}" style="width:140px;padding:4px 6px;font-size:12px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg);color:var(--text)"></td></tr>`;
   });
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-add');
-  await reload();
+  html+='</tbody></table></div>';
+  document.getElementById('bulk-preview').innerHTML=html;
+  document.getElementById('bulk-save-btn').style.display='';
 }
 
-// ─── Bulk Entry ───────────────────────────────────────────────────────────────
-function openBulkModal() {
-  document.getElementById('bulk-client').innerHTML =
-    allClients.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
-  document.getElementById('bulk-date').value = today();
-  document.getElementById('bulk-salesref').value = '';
-  document.getElementById('bulk-list').value = '';
-  openModal('modal-bulk');
-}
-async function saveBulkEntries() {
-  const cid = document.getElementById('bulk-client').value;
-  const date = document.getElementById('bulk-date').value;
-  const sref = document.getElementById('bulk-salesref').value.trim();
-  const lines = document.getElementById('bulk-list').value.trim().split('\n').map(s=>s.trim().toUpperCase()).filter(Boolean);
-  if (!cid || !date || !lines.length) { alert('Please fill in client, date and container list.'); return; }
-  setSyncStatus('saving');
-  const rows = lines.map(cnum => ({
-    container_no: cnum, op: 'unload', unload_date: date,
-    client_id: cid, sales_ref: sref||null, loaded: false, invoiced: false, deleted: false
-  }));
-  const { error } = await sb.from('transactions').insert(rows);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-bulk');
-  await reload();
-}
-
-// ─── Mark Loaded ──────────────────────────────────────────────────────────────
-function openLoadModal(id) {
-  currentLoadId = id;
-  document.getElementById('load-date').value = today();
-  openModal('modal-load');
-}
-async function saveLoadedDate() {
-  const d = document.getElementById('load-date').value;
-  if (!d) { alert('Please select a date.'); return; }
-  setSyncStatus('saving');
-  const { error } = await sb.from('transactions').update({ loaded: true, load_date: d }).eq('id', currentLoadId);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-load');
-  await reload();
-}
-
-// ─── Edit Entry ───────────────────────────────────────────────────────────────
-function openEditModal(id) {
-  const t = allTransactions.find(x => x.id === id);
-  if (!t) return;
-  currentEditId = id;
-  document.getElementById('edit-cnum').value = t.container_no;
-  document.getElementById('edit-salesref').value = t.sales_ref||'';
-  document.getElementById('edit-unload-date').value = t.unload_date||'';
-  document.getElementById('edit-load-date').value = t.load_date||'';
-  document.getElementById('edit-remarks').value = t.remarks||'';
-  const sel = document.getElementById('edit-client');
-  sel.innerHTML = allClients.map(c => `<option value="${c.id}"${c.id===t.client_id?' selected':''}>${escHtml(c.name)}</option>`).join('');
-  openModal('modal-edit');
-}
-async function saveEdit() {
-  const updates = {
-    container_no: document.getElementById('edit-cnum').value.trim().toUpperCase(),
-    client_id: document.getElementById('edit-client').value,
-    sales_ref: document.getElementById('edit-salesref').value.trim()||null,
-    unload_date: document.getElementById('edit-unload-date').value||null,
-    load_date: document.getElementById('edit-load-date').value||null,
-    remarks: document.getElementById('edit-remarks').value.trim()||null,
-  };
-  setSyncStatus('saving');
-  const { error } = await sb.from('transactions').update(updates).eq('id', currentEditId);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-edit');
-  await reload();
-}
-
-// ─── Delete Entry ─────────────────────────────────────────────────────────────
-async function deleteEntry(id) {
-  if (!confirm('Delete this entry?')) return;
-  setSyncStatus('saving');
-  const { error } = await sb.from('transactions').update({ deleted: true }).eq('id', id);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  await reload();
-}
-
-// ─── Invoice ──────────────────────────────────────────────────────────────────
-function openInvModal(id) {
-  pendingInvIds = new Set([id]);
-  const t = allTransactions.find(x => x.id === id);
-  document.getElementById('inv-desc').textContent = t ? `${t.container_no} · ${fmtRO(calcTotal(t))}` : '';
-  document.getElementById('inv-num').value = '';
-  openModal('modal-invoice');
-}
-async function saveInvoice() {
-  const num = document.getElementById('inv-num').value.trim();
-  if (!num) { alert('Please enter invoice number.'); return; }
-  setSyncStatus('saving');
-  const ids = [...pendingInvIds];
-  const { error } = await sb.from('transactions').update({ invoiced: true, invoice_no: num }).in('id', ids);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-invoice');
-  await reload();
-}
-async function unmarkInvoice(id) {
-  if (!confirm('Undo invoice for this container?')) return;
-  setSyncStatus('saving');
-  const { error } = await sb.from('transactions').update({ invoiced: false, invoice_no: null }).eq('id', id);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  await reload();
-}
-
-// ─── Mark Paid ────────────────────────────────────────────────────────────────
-function openPaidModal(id) {
-  currentLoadId = id; // reuse variable
-  document.getElementById('paid-date').value = today();
-  openModal('modal-paid');
-}
-async function savePaidDate() {
-  const d = document.getElementById('paid-date').value;
-  if (!d) { alert('Please select a date.'); return; }
-  setSyncStatus('saving');
-  const { error } = await sb.from('transactions').update({ paid_date: d }).eq('id', currentLoadId);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-paid');
-  await reload();
-}
-
-// ─── Clients CRUD ─────────────────────────────────────────────────────────────
-function openClientModal() {
-  editingClientId = null;
-  document.getElementById('client-modal-title').textContent = 'Add Client';
-  document.getElementById('cl-name').value = '';
-  document.getElementById('cl-contact').value = '';
-  document.getElementById('cl-email').value = '';
-  document.getElementById('cl-rate-storage').value = '1.5';
-  document.getElementById('cl-rate-op').value = '25';
-  openModal('modal-client');
-}
-function openEditClient(id) {
-  const c = allClients.find(x => x.id === id);
-  if (!c) return;
-  editingClientId = id;
-  document.getElementById('client-modal-title').textContent = 'Edit Client';
-  document.getElementById('cl-name').value = c.name;
-  document.getElementById('cl-contact').value = c.contact||'';
-  document.getElementById('cl-email').value = c.email||'';
-  document.getElementById('cl-rate-storage').value = c.rate_storage||1.5;
-  document.getElementById('cl-rate-op').value = c.rate_op||25;
-  openModal('modal-client');
-}
-async function saveClient() {
-  const name = document.getElementById('cl-name').value.trim();
-  if (!name) { alert('Client name is required.'); return; }
-  const data = {
-    name, contact: document.getElementById('cl-contact').value.trim()||null,
-    email: document.getElementById('cl-email').value.trim()||null,
-    rate_storage: parseFloat(document.getElementById('cl-rate-storage').value)||1.5,
-    rate_op: parseFloat(document.getElementById('cl-rate-op').value)||25,
-  };
-  setSyncStatus('saving');
-  let error;
-  if (editingClientId) {
-    ({ error } = await sb.from('clients').update(data).eq('id', editingClientId));
-  } else {
-    ({ error } = await sb.from('clients').insert({ ...data, deleted: false }));
+async function saveBulkEntries(){
+  const clientId=document.getElementById('bulk-client').value;
+  const salesRef=document.getElementById('bulk-salesref').value.trim();
+  if(!clientId){alert('Select a client.');return}
+  const lines=document.getElementById('bulk-list').value.split('\n').map(x=>x.trim().toUpperCase()).filter(Boolean);
+  const isCross=bulkOp==='cross';
+  const skippedExisting=[],skippedRepeated=[],seenInUpload=new Set(),toInsert=[];
+  for(const[i,cnum]of lines.entries()){
+    if(!/^[A-Z]{4}[0-9]{7}$/.test(cnum))continue;
+    if(seenInUpload.has(cnum)){skippedRepeated.push(cnum);continue}
+    seenInUpload.add(cnum);
+    if(!isCross){const dup=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&e.containerNo===cnum);if(dup){skippedExisting.push(cnum);continue}}
+    const dateEl=document.getElementById(`bulk-row-date-${i}`);
+    const date=dateEl?dateEl.value:document.getElementById('bulk-date').value;
+    toInsert.push({container_no:cnum,op:bulkOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false});
   }
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  closeModal('modal-client');
-  await reload();
-  if (currentTab === 'clients') renderClients();
-  else if (currentTab === 'rates') renderRates();
-}
-async function deleteClient(id) {
-  if (!confirm('Delete this client? Their transactions will remain but be unlinked.')) return;
-  setSyncStatus('saving');
-  const { error } = await sb.from('clients').update({ deleted: true }).eq('id', id);
-  if (error) { alert('Error: ' + error.message); setSyncStatus('error'); return; }
-  await reload();
+  if(toInsert.length){
+    setSyncStatus('saving');
+    const{data,error}=await sb.from('transactions').insert(toInsert).select();
+    if(error){setSyncStatus('error');alert('Save error: '+error.message);return}
+    (data||[]).forEach(r=>DB.unshift(rowToEntry(r)));
+    setSyncStatus('saved');
+  }
+  closeModal('modal-bulk');render();
+  alert(`Imported: ${toInsert.length}\nSkipped (already in yard): ${skippedExisting.length}${skippedExisting.length?'\n'+skippedExisting.join('\n'):''}\nSkipped (repeated in upload): ${skippedRepeated.length}${skippedRepeated.length?'\n'+skippedRepeated.join('\n'):''}`);
 }
 
-// ─── Client Portal Login ──────────────────────────────────────────────────────
-function openClientLoginModal(clientId) {
-  clientLoginForId = clientId;
-  const c = allClients.find(x => x.id === clientId);
-  document.getElementById('client-login-for').textContent = 'Creating login for: ' + (c ? c.name : clientId);
-  document.getElementById('cl-login-email').value = c?.email||'';
-  document.getElementById('cl-login-pass').value = '';
-  document.getElementById('cl-login-error').style.display = 'none';
-  openModal('modal-client-login');
+function openClientModal(id){
+  editingClientId=id||null;
+  document.getElementById('client-modal-title').textContent=id?'Edit Client':'Add Client';
+  document.getElementById('cl-name').value=id?(clientById(id)||{}).name||'':'';
+  document.getElementById('modal-client').classList.add('open');
 }
-async function saveClientLogin() {
-  const email = document.getElementById('cl-login-email').value.trim();
-  const pass = document.getElementById('cl-login-pass').value;
-  const errEl = document.getElementById('cl-login-error');
-  const btn = document.getElementById('cl-login-save-btn');
-  errEl.style.display = 'none';
-  if (!email || !pass) { errEl.textContent = 'Email and password are required.'; errEl.style.display = 'block'; return; }
-  if (pass.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
-  btn.disabled = true; btn.textContent = 'Creating…';
-  try {
-    // Sign up client user (uses anon key)
-    const { data: signUpData, error: signUpErr } = await sb.auth.signUp({ email, password: pass });
-    if (signUpErr) { errEl.textContent = signUpErr.message; errEl.style.display = 'block'; return; }
-    const userId = signUpData.user?.id;
-    if (!userId) { errEl.textContent = 'Sign up succeeded but no user ID returned. Check Supabase Auth settings.'; errEl.style.display = 'block'; return; }
-    // Link to client
-    const { error: linkErr } = await sb.from('client_users').insert({ user_id: userId, client_id: clientLoginForId });
-    if (linkErr) { errEl.textContent = 'User created but link failed: ' + linkErr.message; errEl.style.display = 'block'; return; }
-    closeModal('modal-client-login');
-    alert(`Portal login created for ${email}`);
-  } catch(e) {
-    errEl.textContent = 'Error: ' + e.message; errEl.style.display = 'block';
-  } finally {
-    btn.disabled = false; btn.textContent = 'Create Login';
+
+async function saveClient(){
+  const name=document.getElementById('cl-name').value.trim();
+  if(!name){alert('Client name is required.');return}
+  setSyncStatus('saving');
+  if(editingClientId){
+    const{error}=await sb.from('clients').update({name}).eq('id',editingClientId);
+    if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+    const c=clientById(editingClientId);if(c)c.name=name;
+  }else{
+    const{data,error}=await sb.from('clients').insert({name,deleted:false}).select().single();
+    if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+    CLIENTS.push(rowToClient(data));
+  }
+  closeModal('modal-client');setSyncStatus('saved');populateClientDropdowns();render();
+}
+
+async function deleteClient(id){
+  const c=clientById(id);if(!c)return;
+  const hasTx=DB.filter(e=>!e.deleted&&e.clientId===id).length;
+  if(!confirm(`${c.name} has ${hasTx} transaction(s). Delete client?`))return;
+  const{error}=await sb.from('clients').update({deleted:true}).eq('id',id);
+  if(error){alert('Error: '+error.message);return}
+  c.deleted=true;populateClientDropdowns();render();
+}
+
+function openInvModal(id){
+  pendingInvEntry=DB.find(e=>e.id===id);if(!pendingInvEntry)return;
+  document.getElementById('inv-num').value=pendingInvEntry.invoiceNo||'';
+  const{total}=calcTotal(pendingInvEntry);
+  document.getElementById('inv-desc').textContent=`Container: ${pendingInvEntry.containerNo} | Client: ${clientName(pendingInvEntry.clientId)} | Total: RO ${total.toFixed(2)}`;
+  document.getElementById('modal-invoice').classList.add('open');
+}
+
+async function saveInvoice(){
+  const n=document.getElementById('inv-num').value.trim();
+  if(!n){alert('Enter invoice number.');return}
+  if(!pendingInvEntry)return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('transactions').update({invoice_no:n,invoiced:true}).eq('id',pendingInvEntry.id);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  pendingInvEntry.invoiceNo=n;pendingInvEntry.invoiced=true;
+  closeModal('modal-invoice');pendingInvEntry=null;setSyncStatus('saved');render();
+}
+
+async function unmarkInvoice(id){
+  const e=DB.find(x=>x.id===id);
+  if(e&&confirm('Remove invoice mark from '+e.containerNo+'?')){
+    const{error}=await sb.from('transactions').update({invoiced:false,invoice_no:null,paid_date:null}).eq('id',id);
+    if(error){alert('Error: '+error.message);return}
+    e.invoiced=false;e.invoiceNo=null;e.paidDate='';render();
   }
 }
 
-// ─── Client Portal View ───────────────────────────────────────────────────────
-function switchPortalTab(name, btn) {
-  document.querySelectorAll('#client-portal .tab').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  document.getElementById('portal-in-yard').style.display = name === 'in-yard' ? '' : 'none';
-  document.getElementById('portal-completed').style.display = name === 'completed' ? '' : 'none';
-  renderPortalTab(name);
+function togglePaid(id){
+  const e=DB.find(x=>x.id===id);if(!e)return;
+  if(e.paidDate){
+    if(confirm(`Unmark ${e.containerNo} as paid?`)){
+      sb.from('transactions').update({paid_date:null}).eq('id',id).then(({error})=>{
+        if(error){alert('Error: '+error.message);return}
+        e.paidDate='';render();
+      });
+    }
+    return;
+  }
+  currentPaidIds=[id];
+  document.getElementById('paid-date').value=today();
+  document.getElementById('modal-paid').classList.add('open');
 }
-function renderPortalTab(name) {
-  if (!portalClientRecord) return;
-  const cid = portalClientRecord.id;
-  if (name === 'in-yard') {
-    const txs = allTransactions.filter(t => t.client_id === cid && !t.loaded);
-    const el = document.getElementById('portal-in-yard');
-    if (!txs.length) { el.innerHTML = '<div class="empty">No containers currently in yard.</div>'; return; }
-    el.innerHTML = `<div class="overflow-x"><table>
-      <thead><tr><th>Container</th><th>Op</th><th>Gate In</th><th>Days in Yard</th><th>Sales Ref</th><th>Remarks</th></tr></thead>
-      <tbody>${txs.map(t => {
-        const days = daysBetween(t.unload_date);
-        return `<tr>
-          <td><strong>${escHtml(t.container_no)}</strong></td>
-          <td><span class="badge badge-${t.op==='cross'?'cross':'in'}">${t.op==='cross'?'Cross':'Unload'}</span></td>
-          <td>${fmtDate(t.unload_date)}</td>
-          <td>${days}d</td>
-          <td>${escHtml(t.sales_ref||'')}</td>
-          <td>${escHtml(t.remarks||'')}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table></div>`;
-  } else {
-    const txs = allTransactions.filter(t => t.client_id === cid && t.loaded);
-    const el = document.getElementById('portal-completed');
-    if (!txs.length) { el.innerHTML = '<div class="empty">No completed containers.</div>'; return; }
-    el.innerHTML = `<div class="overflow-x"><table>
-      <thead><tr><th>Container</th><th>Op</th><th>Gate In</th><th>Gate Out</th><th>Days</th><th>Sales Ref</th><th>Remarks</th></tr></thead>
-      <tbody>${txs.map(t => `<tr>
-        <td><strong>${escHtml(t.container_no)}</strong></td>
-        <td><span class="badge badge-${t.op==='cross'?'cross':'in'}">${t.op==='cross'?'Cross':'Unload'}</span></td>
-        <td>${fmtDate(t.unload_date)}</td>
-        <td>${fmtDate(t.load_date)}</td>
-        <td>${daysBetween(t.unload_date,t.load_date)}d</td>
-        <td>${escHtml(t.sales_ref||'')}</td>
-        <td>${escHtml(t.remarks||'')}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>`;
+
+function bulkMarkPaid(){
+  if(!selectedInvoices.size)return;
+  currentPaidIds=[...selectedInvoices];
+  document.getElementById('paid-date').value=today();
+  document.getElementById('modal-paid').classList.add('open');
+}
+
+async function savePaidDate(){
+  const date=document.getElementById('paid-date').value;if(!date)return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('transactions').update({paid_date:date}).in('id',currentPaidIds);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  currentPaidIds.forEach(id=>{const e=DB.find(x=>x.id===id);if(e)e.paidDate=date});
+  currentPaidIds=[];selectedInvoices.clear();
+  closeModal('modal-paid');setSyncStatus('saved');render();
+  if(window._afterPaid){window._afterPaid();window._afterPaid=null}
+}
+
+function toggleGroupSelect(invoiceNo,checked){
+  const ids=DB.filter(e=>!e.deleted&&e.invoiced&&String(e.invoiceNo)===String(invoiceNo)).map(e=>e.id);
+  ids.forEach(id=>checked?selectedInvoices.add(id):selectedInvoices.delete(id));
+  document.querySelectorAll('.mark-paid-count-btn').forEach(b=>b.textContent=`Mark Paid (${selectedInvoices.size})`);
+}
+
+function selectInvoiceGroup(invoiceNo){
+  const ids=DB.filter(e=>!e.deleted&&e.invoiced&&String(e.invoiceNo)===String(invoiceNo)).map(e=>e.id);
+  const allSel=ids.length>0&&ids.every(id=>selectedInvoices.has(id));
+  ids.forEach(id=>allSel?selectedInvoices.delete(id):selectedInvoices.add(id));
+  render();
+}
+
+function toggleInvoiceSelection(id,checked){
+  if(checked)selectedInvoices.add(id);else selectedInvoices.delete(id);
+  document.querySelectorAll('.mark-paid-count-btn').forEach(b=>b.textContent=`Mark Paid (${selectedInvoices.size})`);
+}
+
+async function bulkToggleInvoicePaid(invoiceNo){
+  const entries=DB.filter(e=>!e.deleted&&e.invoiced&&String(e.invoiceNo)===String(invoiceNo));
+  const allPaid=entries.every(e=>e.paidDate);
+  if(allPaid){
+    if(confirm(`Unmark invoice ${invoiceNo} as paid?`)){
+      const{error}=await sb.from('transactions').update({paid_date:null}).in('id',entries.map(e=>e.id));
+      if(error){alert('Error: '+error.message);return}
+      entries.forEach(e=>e.paidDate='');render();
+    }
+  }else{
+    currentPaidIds=entries.map(e=>e.id);
+    document.getElementById('paid-date').value=today();
+    document.getElementById('modal-paid').classList.add('open');
   }
 }
 
-// ─── Close modals on backdrop click ──────────────────────────────────────────
-document.querySelectorAll('.modal-overlay').forEach(el => {
-  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
-});
-
-// ─── Init ─────────────────────────────────────────────────────────────────────
-(async () => {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await onLogin(session.user);
+async function deleteEntry(id){
+  const e=DB.find(x=>x.id===id);
+  if(e&&confirm('Delete entry for '+e.containerNo+'?')){
+    const{error}=await sb.from('transactions').update({deleted:true}).eq('id',id);
+    if(error){alert('Error: '+error.message);return}
+    e.deleted=true;render();
   }
-  // else: login screen is already visible
+}
+
+async function markLoaded(id){
+  currentLoadId=id;
+  document.getElementById('load-date').value=today();
+  document.getElementById('modal-load').classList.add('open');
+}
+
+async function saveLoadedDate(){
+  const loadDate=document.getElementById('load-date').value;if(!loadDate)return;
+  const e=DB.find(x=>x.id===currentLoadId);if(!e)return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('transactions').update({loaded:true,load_date:loadDate}).eq('id',currentLoadId);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  e.loaded=true;e.loadDate=loadDate;
+  closeModal('modal-load');setSyncStatus('saved');render();
+}
+
+function toggleLoadSelection(id,checked){
+  if(checked)selectedLoad.add(id);else selectedLoad.delete(id);
+  const btn=document.getElementById('bulk-load-btn');
+  if(btn)btn.textContent=`Mark Loaded (${selectedLoad.size})`;
+}
+function toggleSelectAllLoad(checked){
+  const inYard=filterByCl(DB.filter(e=>!e.deleted)).filter(e=>e.op==='unload'&&!e.loaded);
+  selectedLoad=checked?new Set(inYard.map(e=>e.id)):new Set();
+  renderYard();
+}
+
+function openBulkLoadModal(){
+  if(!selectedLoad.size)return;
+  const todayStr=today();
+  const rows=[...selectedLoad].map(id=>{
+    const e=DB.find(x=>x.id===id);if(!e)return'';
+    return`<div class="field" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><label style="flex:1;font-weight:600">${esc(e.containerNo)}</label><input type="date" class="bulk-load-date" data-id="${e.id}" value="${todayStr}"></div>`;
+  }).join('');
+  document.getElementById('bulk-load-rows').innerHTML=rows;
+  document.getElementById('modal-bulk-load').classList.add('open');
+}
+
+async function saveBulkLoad(){
+  const inputs=document.querySelectorAll('.bulk-load-date');
+  const updates=[];
+  inputs.forEach(inp=>{if(inp.value)updates.push({id:inp.dataset.id,load_date:inp.value})});
+  if(!updates.length)return;
+  setSyncStatus('saving');
+  for(const u of updates){
+    await sb.from('transactions').update({loaded:true,load_date:u.load_date}).eq('id',u.id);
+    const e=DB.find(x=>x.id===u.id);if(e){e.loaded=true;e.loadDate=u.load_date}
+  }
+  selectedLoad.clear();
+  closeModal('modal-bulk-load');setSyncStatus('saved');render();
+  alert(`Marked ${updates.length} container(s) as loaded.`);
+}
+
+function openEditModal(id){
+  const e=DB.find(x=>x.id===id);if(!e)return;
+  currentEditId=id;
+  populateClientDropdowns();
+  document.getElementById('edit-cnum').value=e.containerNo||'';
+  document.getElementById('edit-salesref').value=e.salesRef||'';
+  document.getElementById('edit-remarks').value=e.remarks||'';
+  document.getElementById('edit-unload-date').value=e.unloadDate||'';
+  document.getElementById('edit-load-date').value=e.loadDate||'';
+  setTimeout(()=>{const cs=document.getElementById('edit-client');if(cs)cs.value=e.clientId||''},50);
+  document.getElementById('modal-edit').classList.add('open');
+}
+
+async function saveEditedEntry(){
+  const e=DB.find(x=>x.id===currentEditId);if(!e)return;
+  const containerNo=(document.getElementById('edit-cnum').value||'').trim();
+  if(!containerNo){alert('Container number is required.');return}
+  const clientId=document.getElementById('edit-client').value||e.clientId;
+  const salesRef=document.getElementById('edit-salesref').value.trim();
+  const remarks=document.getElementById('edit-remarks').value.trim();
+  const unloadDate=document.getElementById('edit-unload-date').value;
+  const loadDate=document.getElementById('edit-load-date').value;
+  if(unloadDate&&loadDate&&loadDate<unloadDate){alert('Load date cannot be earlier than unload date.');return}
+  setSyncStatus('saving');
+  const upd={container_no:containerNo,client_id:clientId,sales_ref:salesRef,remarks};
+  if(unloadDate)upd.unload_date=unloadDate;
+  if(loadDate){upd.load_date=loadDate;upd.loaded=true}
+  const{error}=await sb.from('transactions').update(upd).eq('id',currentEditId);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  e.containerNo=containerNo;e.clientId=clientId;e.salesRef=salesRef;e.remarks=remarks;
+  if(unloadDate)e.unloadDate=unloadDate;
+  if(loadDate){e.loadDate=loadDate;e.loaded=true}
+  closeModal('modal-edit');setSyncStatus('saved');render();
+}
+
+async function bulkInvoiceSelected(){
+  if(!selectedInvoices.size){alert('Select at least one container.');return}
+  const invoiceNo=prompt('Enter invoice number');if(!invoiceNo)return;
+  const toUpdate=[...selectedInvoices].filter(id=>{const e=DB.find(x=>x.id===id);return e&&!e.invoiced});
+  const skipped=selectedInvoices.size-toUpdate.length;
+  if(toUpdate.length){
+    setSyncStatus('saving');
+    const{error}=await sb.from('transactions').update({invoice_no:invoiceNo,invoiced:true}).in('id',toUpdate);
+    if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+    toUpdate.forEach(id=>{const e=DB.find(x=>x.id===id);if(e){e.invoiceNo=invoiceNo;e.invoiced=true}});
+    setSyncStatus('saved');
+  }
+  selectedInvoices.clear();render();
+  alert(`Invoice Assigned\nUpdated: ${toUpdate.length}\nSkipped (already invoiced): ${skipped}`);
+}
+
+function markInvoicePaidFromDetail(invoiceNo,cid){
+  const entries=DB.filter(e=>!e.deleted&&e.invoiced&&String(e.invoiceNo)===String(invoiceNo));
+  currentPaidIds=entries.map(e=>e.id);
+  document.getElementById('paid-date').value=today();
+  document.getElementById('modal-paid').classList.add('open');
+  window._afterPaid=()=>renderClientDetail(cid,'ppay');
+}
+
+function copyClientLink(clientId){
+  const c=clientById(clientId);
+  const url='https://rachitoman.github.io/yardwork/yard_tracker_v2.html?client='+encodeURIComponent(clientId);
+  navigator.clipboard.writeText(url).catch(()=>{const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)});
+  alert('Client portal link copied!\n\n'+url+'\n\nSend this to '+(c?c.name:clientId));
+}
+
+// Excel exports
+function ensureXLSX(){
+  return new Promise((resolve,reject)=>{
+    if(window.XLSX){resolve();return}
+    const s=document.createElement('script');
+    s.src='https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+    s.onload=resolve;s.onerror=()=>reject(new Error('Failed to load Excel library.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportBillingSheet(cid){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const cidToUse=cid||globalClientFilter;
+  let data=DB.filter(e=>!e.deleted&&!e.invoiced&&(e.loaded||e.op==='cross'));
+  if(cidToUse)data=data.filter(e=>e.clientId===cidToUse);
+  if(!data.length){alert('No ready-to-invoice containers.');return}
+  const label=cidToUse?clientName(cidToUse):'All Clients';
+  let tS=0,tOp=0,tTotal=0;
+  const rows=data.map(e=>{const r=calcTotal(e);tS+=r.storageCost;tOp+=r.opCost;tTotal+=r.total;return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':r.days,'Storage (RO)':+r.storageCost.toFixed(3),'Op Charge (RO)':+r.opCost.toFixed(3),'Total (RO)':+r.total.toFixed(3),'Remarks':e.op==='cross'?'Cross Load':(e.remarks||'')}});
+  rows.push({});rows.push({'Container No':'TOTAL','Storage (RO)':+tS.toFixed(3),'Op Charge (RO)':+tOp.toFixed(3),'Total (RO)':+tTotal.toFixed(3)});
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:16},{wch:16},{wch:14},{wch:20}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Billing');
+  XLSX.writeFile(wb,`${label}_Billing_${today()}.xlsx`);
+}
+
+async function exportPendingInvoiceSummary(){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const summary={};
+  DB.forEach(e=>{
+    if(e.deleted||e.invoiced)return;
+    const isUL=e.op==='unload'&&e.loaded,isCross=e.op==='cross';
+    if(!isUL&&!isCross)return;
+    const cl=clientName(e.clientId)||'Unknown';
+    if(!summary[cl])summary[cl]={unloadLoad:0,cross:0};
+    if(isUL)summary[cl].unloadLoad++;if(isCross)summary[cl].cross++;
+  });
+  const rows=Object.keys(summary).sort().map(cl=>({'Client':cl,'Unload+Load Pending':summary[cl].unloadLoad,'Cross-Load Pending':summary[cl].cross,'Total':summary[cl].unloadLoad+summary[cl].cross}));
+  if(!rows.length){alert('No pending invoices.');return}
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:35},{wch:20},{wch:20},{wch:10}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pending Summary');
+  XLSX.writeFile(wb,`Pending_Invoice_Summary_${today()}.xlsx`);
+}
+
+async function exportClientInYardExcel(cid){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const c=clientById(cid);const label=c?c.name:'All';
+  let data=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded);
+  if(cid)data=data.filter(e=>e.clientId===cid);
+  if(!data.length){alert('No containers in yard.');return}
+  let tS=0,tT=0;
+  const rows=data.map(e=>{const r=calcTotal(e);tS+=r.storageCost;tT+=r.total;return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Days':r.days,'Storage Accrued (RO)':+r.storageCost.toFixed(2),'Op Charge (RO)':+r.opCost.toFixed(2),'Total Accrued (RO)':+r.total.toFixed(2),'Sales Ref':e.salesRef||'','Remarks':e.remarks||''}});
+  rows.push({});rows.push({'Container No':'TOTAL','Storage Accrued (RO)':+tS.toFixed(2),'Total Accrued (RO)':+tT.toFixed(2)});
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:25},{wch:14},{wch:8},{wch:20},{wch:16},{wch:20},{wch:14},{wch:20}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'In Yard');
+  XLSX.writeFile(wb,`${label}_InYard_${today()}.xlsx`);
+}
+
+async function exportClientCompletedExcel(cid){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const c=clientById(cid);const label=c?c.name:'Client';
+  const data=DB.filter(e=>!e.deleted&&e.clientId===cid&&((e.op==='unload'&&e.loaded)||e.op==='cross'));
+  if(!data.length){alert('No completed containers.');return}
+  const rows=data.sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||'')).map(e=>({'Container No':e.containerNo,'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':calcTotal(e).days,'Type':e.op==='cross'?'Cross-load':'Unload+Load','Remarks':e.remarks||''}));
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:14},{wch:14},{wch:8},{wch:14},{wch:25}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Completed');
+  XLSX.writeFile(wb,`${label}_Completed_${today()}.xlsx`);
+}
+function exportClientBillingExcel(cid){exportBillingSheet(cid)}
+
+async function exportPendingPaymentExcel(){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  let data=filterByCl(DB.filter(e=>!e.deleted&&e.invoiced&&e.invoiceNo&&!e.paidDate));
+  const groups={};data.forEach(e=>{(groups[e.invoiceNo]=groups[e.invoiceNo]||[]).push(e)});
+  const rows=Object.entries(groups).map(([inv,entries])=>{const total=entries.reduce((s,e)=>s+calcTotal(e).total,0);return{'Invoice No':inv,'Client':clientName(entries[0].clientId),'Containers':entries.length,'Container Nos':entries.map(e=>e.containerNo).join(', '),'Amount (RO)':+total.toFixed(2),'Status':'Unpaid'}}).sort((a,b)=>String(b['Invoice No']).localeCompare(String(a['Invoice No'])));
+  if(!rows.length){alert('No unpaid invoices.');return}
+  const grand=rows.reduce((s,r)=>s+r['Amount (RO)'],0);
+  rows.push({});rows.push({'Invoice No':'TOTAL','Amount (RO)':+grand.toFixed(2)});
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:16},{wch:28},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pending Payments');
+  XLSX.writeFile(wb,`Pending_Payment_Summary_${today()}.xlsx`);
+}
+
+async function exportClientPendingPaymentExcel(cid){
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const c=clientById(cid);
+  const data=DB.filter(e=>!e.deleted&&e.invoiced&&e.invoiceNo&&e.clientId===cid&&!e.paidDate);
+  const groups={};data.forEach(e=>{(groups[e.invoiceNo]=groups[e.invoiceNo]||[]).push(e)});
+  const rows=Object.entries(groups).map(([inv,entries])=>{const total=entries.reduce((s,e)=>s+calcTotal(e).total,0);return{'Invoice No':inv,'Containers':entries.length,'Container Nos':entries.map(e=>e.containerNo).join(', '),'Amount (RO)':+total.toFixed(2),'Status':'Unpaid'}});
+  if(!rows.length){alert('No unpaid invoices for this client.');return}
+  const grand=rows.reduce((s,r)=>s+r['Amount (RO)'],0);
+  rows.push({});rows.push({'Invoice No':'TOTAL','Amount (RO)':+grand.toFixed(2)});
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:16},{wch:12},{wch:50},{wch:14},{wch:10}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Pending Payment');
+  XLSX.writeFile(wb,`${c?c.name:'Client'}_PendingPayment_${today()}.xlsx`);
+}
+
+// Rendering helpers
+function entryRow(e){
+  const inYard=!e.deleted&&e.op==='unload'&&!e.loaded;
+  const isCross=e.op==='cross';
+  const r=calcTotal(e);
+  const opBadge=isCross?'<span class="badge badge-cross">Cross-load</span>':inYard?'<span class="badge badge-in">In yard</span>':'<span class="badge badge-out">Loaded</span>';
+  const invCell=e.invoiced
+    ?`<span class="badge badge-inv" style="cursor:pointer" onclick="selectInvoiceGroup('${esc(e.invoiceNo)}')">${esc(e.invoiceNo)}</span>
+      <span class="badge ${e.paidDate?'badge-paid':'badge-unpaid'}" onclick="togglePaid('${e.id}')">${e.paidDate?'Paid '+fmt(e.paidDate):'Unpaid'}</span>
+      <button class="btn btn-sm" onclick="unmarkInvoice('${e.id}')">✕</button>`
+    :(e.loaded||isCross?`<button class="btn btn-sm" onclick="openInvModal('${e.id}')">Mark invoiced</button>`:
+    '<span style="font-size:13px;font-weight:600;color:var(--text2)">In yard</span>');
+  return`<tr>
+    <td><input type="checkbox" ${selectedInvoices.has(e.id)?'checked':''} onchange="toggleInvoiceSelection('${e.id}',this.checked)"></td>
+    <td><strong>${esc(e.containerNo)}</strong>${e.remarks?`<div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(e.remarks)}</div>`:''}</td>
+    <td>${esc(clientName(e.clientId))}</td>
+    <td>${fmt(e.unloadDate)}</td>
+    <td>${fmt(e.loadDate)}</td>
+    <td style="text-align:center">${r.days}</td>
+    <td>${opBadge}</td>
+    <td>${invCell}</td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-sm" onclick="openEditModal('${e.id}')" title="Edit">✏️</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteEntry('${e.id}')" title="Delete">🗑</button>
+    </td>
+  </tr>`;
+}
+
+function yardRow(e){
+  const r=calcTotal(e);
+  return`<tr>
+    <td><input type="checkbox" ${selectedLoad.has(e.id)?'checked':''} onchange="toggleLoadSelection('${e.id}',this.checked)"></td>
+    <td><strong>${esc(e.containerNo)}</strong>${e.remarks?`<div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(e.remarks)}</div>`:''}</td>
+    <td>${esc(clientName(e.clientId))}</td>
+    <td>${fmt(e.unloadDate)}</td>
+    <td style="text-align:center">${r.days}</td>
+    <td><span class="badge badge-in">In Yard</span></td>
+    <td><button class="btn btn-sm" onclick="markLoaded('${e.id}')">Loaded</button></td>
+  </tr>`;
+}
+
+function tableWrap(rows,tfoot){
+  return`<div class="overflow-x"><table>
+    <thead><tr><th style="width:40px"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th>Gate Out</th><th style="text-align:center">Days</th><th>Status</th><th>Invoice</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="9" class="empty">No records found.</td></tr>'}</tbody>${tfoot||''}
+  </table></div>`;
+}
+function yardTableWrap(rows){
+  return`<div class="overflow-x"><table>
+    <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleSelectAllLoad(this.checked)"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th style="text-align:center">Days</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" class="empty">No records found.</td></tr>'}</tbody>
+  </table></div>`;
+}
+
+// Tab renders
+function renderStats(){
+  let data=DB.filter(e=>!e.deleted);
+  if(globalClientFilter)data=data.filter(e=>e.clientId===globalClientFilter);
+  const inYard=data.filter(e=>e.op==='unload'&&!e.loaded).length;
+  const pendingUL=data.filter(e=>e.op==='unload'&&e.loaded&&!e.invoiced).length;
+  const pendingCross=data.filter(e=>e.op==='cross'&&!e.invoiced).length;
+  const clientCount=CLIENTS.filter(c=>!c.deleted).length;
+  const invGroups={};data.filter(e=>e.invoiced&&e.invoiceNo).forEach(e=>{(invGroups[e.invoiceNo]=invGroups[e.invoiceNo]||[]).push(e)});
+  const unpaidInvoices=Object.values(invGroups).filter(g=>g.some(e=>!e.paidDate)).length;
+  const unpaidAmt=data.filter(e=>e.invoiced&&!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
+  document.getElementById('stats').innerHTML=`
+    <div class="stat" onclick="switchTab('yard',document.getElementById('tab-btn-yard'))"><div class="stat-label">In Yard</div><div class="stat-num" style="color:#1D9E75">${inYard}</div></div>
+    <div class="stat" onclick="switchTab('pending',document.getElementById('tab-btn-pending'))"><div class="stat-label">Unload+Load Pending</div><div class="stat-num" style="color:#BA7517">${pendingUL}</div></div>
+    <div class="stat" onclick="switchTab('pending',document.getElementById('tab-btn-pending'))"><div class="stat-label">Cross-Load Pending</div><div class="stat-num" style="color:#2563EB">${pendingCross}</div></div>
+    <div class="stat" onclick="switchTab('pending',document.getElementById('tab-btn-pending'))"><div class="stat-label">Total Pending</div><div class="stat-num" style="color:#E24B4A">${pendingUL+pendingCross}</div></div>
+    <div class="stat" onclick="switchTab('unpaid',document.getElementById('tab-btn-unpaid'))"><div class="stat-label">Unpaid Invoices</div><div class="stat-num" style="color:#B3261E">${unpaidInvoices}</div><div style="font-size:11px;color:#B3261E">RO ${unpaidAmt.toFixed(2)}</div></div>
+    <div class="stat" onclick="switchTab('clients',document.getElementById('tab-btn-clients'))"><div class="stat-label">Clients</div><div class="stat-num">${clientCount}</div></div>`;
+}
+
+function renderYard(){
+  const data=filterByCl(DB.filter(e=>!e.deleted));
+  const inYard=data.filter(e=>e.op==='unload'&&!e.loaded);
+  const inYardIds=new Set(inYard.map(e=>e.id));
+  selectedLoad.forEach(id=>{if(!inYardIds.has(id))selectedLoad.delete(id)});
+  document.getElementById('tab-yard').innerHTML=
+    `<div class="filter-bar"><button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button></div>`+
+    yardTableWrap(inYard.map(e=>yardRow(e)).join(''));
+}
+
+function renderAll(){
+  const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('tab-all').innerHTML=`<div class="filter-bar">
+    <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice</button>
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportBillingSheet()">Export Billing</button>
+    <button class="btn btn-bulk" onclick="exportPendingInvoiceSummary()">Pending Summary</button>
+    <input id="f-search" placeholder="Container / client…" oninput="renderAllTable()" style="width:160px">
+    <select id="f-status" onchange="renderAllTable()"><option value="">All statuses</option><option value="inyard">In yard</option><option value="departed">Departed</option><option value="cross">Cross-load</option></select>
+    <select id="f-inv2" onchange="renderAllTable()"><option value="">All</option><option value="0">Not invoiced</option><option value="1">Invoiced</option></select>
+    <select id="f-cl2" onchange="renderAllTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="all-table"></div>`;
+  renderAllTable();
+}
+function renderAllTable(){
+  let data=DB.filter(e=>!e.deleted);
+  if(globalClientFilter)data=data.filter(e=>e.clientId===globalClientFilter);
+  const search=(document.getElementById('f-search')?.value||'').toLowerCase();
+  const status=document.getElementById('f-status')?.value||'';
+  const inv=document.getElementById('f-inv2')?.value||'';
+  const cl=document.getElementById('f-cl2')?.value||'';
+  if(search)data=data.filter(e=>e.containerNo.toLowerCase().includes(search)||(clientName(e.clientId)||'').toLowerCase().includes(search));
+  if(status==='inyard')data=data.filter(e=>e.op==='unload'&&!e.loadDate);
+  else if(status==='departed')data=data.filter(e=>e.op==='unload'&&e.loadDate);
+  else if(status==='cross')data=data.filter(e=>e.op==='cross');
+  if(inv==='0')data=data.filter(e=>!e.invoiced);
+  if(inv==='1')data=data.filter(e=>e.invoiced);
+  if(cl)data=data.filter(e=>e.clientId===cl);
+  data.sort((a,b)=>{const aIY=a.op==='unload'&&!a.loaded,bIY=b.op==='unload'&&!b.loaded;if(aIY&&!bIY)return-1;if(!aIY&&bIY)return 1;return(a.unloadDate||'').localeCompare(b.unloadDate||'')});
+  document.getElementById('all-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''));
+}
+
+function renderPending(){
+  const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('tab-pending').innerHTML=`<div class="filter-bar">
+    <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportBillingSheet()">Export Billing Excel</button>
+    <select id="f-pend-cl" onchange="renderPendingFiltered()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="pending-table"></div>`;
+  renderPendingFiltered();
+}
+function renderPendingFiltered(){
+  const cl=document.getElementById('f-pend-cl')?.value||'';
+  let data=filterByCl(DB.filter(e=>!e.deleted&&!e.invoiced&&(e.op==='cross'||(e.op==='unload'&&e.loaded))));
+  if(cl)data=data.filter(e=>e.clientId===cl);
+  data.sort((a,b)=>(a.unloadDate||'').localeCompare(b.unloadDate||''));
+  const total=data.reduce((s,e)=>s+calcTotal(e).total,0);
+  const tfoot=data.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Pending total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
+  document.getElementById('pending-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot);
+}
+
+function renderInvoiced(){
+  document.getElementById('tab-invoiced').innerHTML=`<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <select id="f-paid" onchange="renderInvoicedTable()"><option value="">All</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
+  </div><div id="invoiced-table"></div>`;
+  renderInvoicedTable();
+}
+function renderInvoicedTable(){
+  const pf=document.getElementById('f-paid')?.value||'';
+  let data=filterByCl(DB.filter(e=>!e.deleted&&e.invoiced));
+  if(pf==='paid')data=data.filter(e=>e.paidDate);
+  if(pf==='unpaid')data=data.filter(e=>!e.paidDate);
+  data.sort((a,b)=>(b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+  const total=data.reduce((s,e)=>s+calcTotal(e).total,0);
+  const tfoot=data.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
+  document.getElementById('invoiced-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot);
+}
+
+function renderPayments(){
+  const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('tab-payments').innerHTML=`<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()">Export Excel</button>
+    <select id="f-pay-status" onchange="renderPaymentsTable()"><option value="">All</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select>
+    <select id="f-pay-cl" onchange="renderPaymentsTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="payments-table"></div>`;
+  renderPaymentsTable();
+}
+function renderPaymentsTable(){
+  const pf=document.getElementById('f-pay-status')?.value||'';
+  const cl=document.getElementById('f-pay-cl')?.value||'';
+  let data=filterByCl(DB.filter(e=>!e.deleted&&e.invoiced&&e.invoiceNo));
+  if(cl)data=data.filter(e=>e.clientId===cl);
+  const groups={};data.forEach(e=>{(groups[e.invoiceNo]=groups[e.invoiceNo]||[]).push(e)});
+  let groupArr=Object.entries(groups).map(([inv,entries])=>{
+    const isPaid=entries.every(e=>e.paidDate),total=entries.reduce((s,e)=>s+calcTotal(e).total,0),paidDate=isPaid?entries.map(e=>e.paidDate).sort().pop():'';
+    return{inv,entries,isPaid,total,paidDate,cId:entries[0].clientId};
+  });
+  if(pf==='paid')groupArr=groupArr.filter(g=>g.isPaid);
+  if(pf==='unpaid')groupArr=groupArr.filter(g=>!g.isPaid);
+  groupArr.sort((a,b)=>String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal=groupArr.reduce((s,g)=>s+g.total,0);
+  const unpaidTotal=groupArr.filter(g=>!g.isPaid).reduce((s,g)=>s+g.total,0);
+  const rows=groupArr.map(g=>{
+    const allSel=g.entries.length>0&&g.entries.every(e=>selectedInvoices.has(e.id));
+    return`<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${esc(g.inv)}',this.checked)"></td>
+      <td><strong>${esc(g.inv)}</strong></td>
+      <td>${esc(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge ${g.isPaid?'badge-paid':'badge-unpaid'}" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${esc(g.inv)}')">${g.isPaid?'Paid '+fmt(g.paidDate):'Unpaid — click to mark paid'}</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>esc(e.containerNo)).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot=groupArr.length?`<tfoot><tr class="tfoot-row"><td colspan="4">Grand total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr><tr class="tfoot-row" style="color:#B3261E"><td colspan="4">Unpaid total</td><td>RO ${unpaidTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>`:'';
+  document.getElementById('payments-table').innerHTML=`<div class="overflow-x"><table><thead><tr><th style="width:36px"></th><th>Invoice No.</th><th>Client</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">No invoices found.</td></tr>'}</tbody>${tfoot}</table></div>`;
+}
+
+function renderUnpaid(){
+  const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('tab-unpaid').innerHTML=`<div class="filter-bar">
+    <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()">Export Excel</button>
+    <select id="f-unpaid-cl" onchange="renderUnpaidTable()"><option value="">All clients</option>${clientOpts}</select>
+  </div><div id="unpaid-table"></div>`;
+  renderUnpaidTable();
+}
+function renderUnpaidTable(){
+  const cl=document.getElementById('f-unpaid-cl')?.value||'';
+  let data=filterByCl(DB.filter(e=>!e.deleted&&e.invoiced&&e.invoiceNo&&!e.paidDate));
+  if(cl)data=data.filter(e=>e.clientId===cl);
+  const groups={};data.forEach(e=>{(groups[e.invoiceNo]=groups[e.invoiceNo]||[]).push(e)});
+  const groupArr=Object.entries(groups).map(([inv,entries])=>({inv,entries,total:entries.reduce((s,e)=>s+calcTotal(e).total,0),cId:entries[0].clientId})).sort((a,b)=>String(b.inv).localeCompare(String(a.inv)));
+  const grandTotal=groupArr.reduce((s,g)=>s+g.total,0);
+  const rows=groupArr.map(g=>{
+    const allSel=g.entries.every(e=>selectedInvoices.has(e.id));
+    return`<tr>
+      <td><input type="checkbox" ${allSel?'checked':''} onchange="toggleGroupSelect('${esc(g.inv)}',this.checked)"></td>
+      <td><strong>${esc(g.inv)}</strong></td>
+      <td>${esc(clientName(g.cId))}</td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="bulkToggleInvoicePaid('${esc(g.inv)}')">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>esc(e.containerNo)).join(', ')}</td>
+    </tr>`;
+  }).join('');
+  const tfoot=groupArr.length?`<tfoot><tr class="tfoot-row"><td colspan="4">Total unpaid</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>`:'';
+  document.getElementById('unpaid-table').innerHTML=`<div class="overflow-x"><table><thead><tr><th style="width:36px"></th><th>Invoice No.</th><th>Client</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">No unpaid invoices.</td></tr>'}</tbody>${tfoot}</table></div>`;
+}
+
+function renderClients(){
+  const active=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><div style="font-size:15px;font-weight:500">Clients (${active.length})</div><button class="btn btn-primary btn-sm" onclick="openClientModal(null)">+ Add Client</button></div>`;
+  if(!active.length)html+='<div class="empty">No clients yet.</div>';
+  else active.forEach((c,i)=>{
+    const ai=i%AV_BG.length;
+    const txAll=DB.filter(e=>!e.deleted&&e.clientId===c.id);
+    const inYard=txAll.filter(e=>e.op==='unload'&&!e.loaded).length;
+    const totalBilled=txAll.filter(e=>e.invoiced).reduce((s,e)=>s+calcTotal(e).total,0);
+    const pendingAmt=txAll.filter(e=>!e.invoiced&&(e.loaded||e.op==='cross')).reduce((s,e)=>s+calcTotal(e).total,0);
+    const unpaidAmt=txAll.filter(e=>e.invoiced&&!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
+    const lastLoadedTx=txAll.filter(e=>e.loadDate).sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||''));
+    const lastLoaded=lastLoadedTx.length?lastLoadedTx[0].loadDate:'';
+    html+=`<div class="client-row">
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;font-size:14px">${esc(c.name)}</div>
+        <div class="client-summary">
+          <span style="color:#1D9E75">${inYard} in yard</span> &bull; ${txAll.length} total &bull;
+          Last loaded: ${lastLoaded?fmt(lastLoaded):'–'} &bull; RO ${totalBilled.toFixed(2)} billed &bull;
+          <span style="color:#BA7517">RO ${pendingAmt.toFixed(2)} pending</span> &bull;
+          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
+        <button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')">📊 In-Yard XLS</button>
+        <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
+        <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.id}')">🔗 Client Link</button>
+        <button class="btn btn-sm" onclick="openClientModal('${c.id}')">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>
+      </div>
+    </div>`;
+  });
+  document.getElementById('tab-clients').innerHTML=html;
+  if(window._detailClientId)renderClientDetail(window._detailClientId,window._detailTab||'inyard');
+}
+
+function openClientDetail(cid,tab){
+  window._detailClientId=cid;window._detailTab=tab||'inyard';
+  if(currentTab!=='clients'){switchTab('clients',document.getElementById('tab-btn-clients'));return}
+  renderClientDetail(cid,window._detailTab);
+}
+function setDetailTab(cid,tab){window._detailClientId=cid;window._detailTab=tab;renderClientDetail(cid,tab)}
+function closeClientDetail(){window._detailClientId=null;window._detailTab=null;const p=document.getElementById('client-detail-panel');if(p)p.remove()}
+
+function renderClientDetail(cid,tab){
+  if(!cid)return;tab=tab||'inyard';
+  const c=clientById(cid);if(!c)return;
+  const ai=CLIENTS.filter(x=>!x.deleted).findIndex(x=>x.id===cid)%AV_BG.length;
+  const txAll=DB.filter(e=>!e.deleted&&e.clientId===cid);
+  const inYardRows=txAll.filter(e=>e.op==='unload'&&!e.loaded);
+  const allRows=[...txAll].sort((a,b)=>(b.unloadDate||'').localeCompare(a.unloadDate||''));
+  const pendingRows=txAll.filter(e=>!e.invoiced&&(e.op==='cross'||(e.op==='unload'&&e.loaded)));
+  const invoicedRows=txAll.filter(e=>e.invoiced);
+  const unpaidInvGroups={};
+  invoicedRows.filter(e=>!e.paidDate&&e.invoiceNo).forEach(e=>{(unpaidInvGroups[e.invoiceNo]=unpaidInvGroups[e.invoiceNo]||[]).push(e)});
+  const TABS=[['inyard',`In Yard (${inYardRows.length})`],['alltx',`All Transactions (${txAll.length})`],['pending',`Pending Invoice (${pendingRows.length})`],['invoiced',`Invoiced (${invoicedRows.length})`],['ppay',`Pending Payment (${Object.keys(unpaidInvGroups).length} inv)`]];
+  const tabBtns=TABS.map(([id,lbl])=>`<button class="cdp-tab${tab===id?' active':''}" onclick="setDetailTab('${cid}','${id}')">${lbl}</button>`).join('');
+  let bodyHtml='';
+  if(tab==='inyard'){
+    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-bulk btn-sm" onclick="exportClientInYardExcel('${cid}')">📊 Export Excel</button></div>`+(inYardRows.length?yardTableWrap(inYardRows.map(e=>yardRow(e)).join('')):'<div class="empty">No containers in yard.</div>');
+  }else if(tab==='alltx'){
+    const total=allRows.reduce((s,e)=>s+calcTotal(e).total,0);
+    const tfoot=allRows.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
+    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button></div>`+tableWrap(allRows.map(e=>entryRow(e)).join(''),tfoot);
+  }else if(tab==='pending'){
+    const sorted=[...pendingRows].sort((a,b)=>(a.unloadDate||'').localeCompare(b.unloadDate||''));
+    const total=sorted.reduce((s,e)=>s+calcTotal(e).total,0);
+    const tfoot=sorted.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
+    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice</button><button class="btn btn-bulk btn-sm" onclick="exportClientBillingExcel('${cid}')">📊 Billing XLS</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot):'<div class="empty">No containers pending invoice.</div>');
+  }else if(tab==='invoiced'){
+    const sorted=[...invoicedRows].sort((a,b)=>(b.invoiceNo||'').localeCompare(a.invoiceNo||''));
+    const total=sorted.reduce((s,e)=>s+calcTotal(e).total,0);
+    const tfoot=sorted.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
+    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot):'<div class="empty">No invoiced containers.</div>');
+  }else if(tab==='ppay'){
+    const groupArr=Object.entries(unpaidInvGroups).map(([inv,entries])=>({inv,entries,total:entries.reduce((s,e)=>s+calcTotal(e).total,0)})).sort((a,b)=>String(b.inv).localeCompare(String(a.inv)));
+    const grandTotal=groupArr.reduce((s,g)=>s+g.total,0);
+    const rows=groupArr.map(g=>`<tr>
+      <td><strong>${esc(g.inv)}</strong></td>
+      <td style="text-align:center">${g.entries.length}</td>
+      <td><strong>RO ${g.total.toFixed(2)}</strong></td>
+      <td><span class="badge badge-unpaid" style="cursor:pointer" onclick="markInvoicePaidFromDetail('${esc(g.inv)}','${cid}')">Unpaid — click to mark paid</span></td>
+      <td style="font-size:12px;color:var(--text2)">${g.entries.map(e=>esc(e.containerNo)).join(', ')}</td>
+    </tr>`).join('');
+    const tfoot=groupArr.length?`<tfoot><tr class="tfoot-row"><td colspan="2">Unpaid total</td><td>RO ${grandTotal.toFixed(2)}</td><td colspan="2"></td></tr></tfoot>`:'';
+    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-bulk btn-sm" onclick="exportClientPendingPaymentExcel('${cid}')">📊 Export Excel</button></div>
+    <div class="overflow-x"><table><thead><tr><th>Invoice No.</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">No unpaid invoices.</td></tr>'}</tbody>${tfoot}</table></div>`;
+  }
+  const totalBilled=invoicedRows.reduce((s,e)=>s+calcTotal(e).total,0);
+  const unpaidAmt=invoicedRows.filter(e=>!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
+  let panel=document.getElementById('client-detail-panel');
+  if(!panel){panel=document.createElement('div');panel.id='client-detail-panel';panel.className='client-detail-panel';document.getElementById('tab-clients').appendChild(panel)}
+  panel.innerHTML=`
+    <div class="cdp-header">
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};width:40px;height:40px;font-size:14px">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:15px">${esc(c.name)}</div>
+        <div style="font-size:12px;color:var(--text2)">
+          <span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
+          <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
+          RO ${totalBilled.toFixed(2)} billed &bull;
+          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
+          ${txAll.length} total transactions
+        </div>
+      </div>
+      <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
+    </div>
+    <div class="cdp-tabs">${tabBtns}</div>
+    <div class="cdp-body">${bodyHtml}</div>`;
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function renderRates(){
+  document.getElementById('tab-rates').innerHTML=`
+    <div style="font-size:15px;font-weight:500;margin-bottom:1rem">Storage rate</div>
+    <table style="max-width:360px;margin-bottom:1.25rem"><thead><tr><th>Period</th><th>Rate per day</th></tr></thead><tbody>
+      <tr><td>Every day in yard</td><td>RO ${STORAGE_RATE.toFixed(2)}</td></tr>
+      <tr><td>Same-day gate in &amp; gate out</td><td>RO 0.00 (no charge)</td></tr>
+    </tbody></table>
+    <div style="height:0.5px;background:var(--border);margin:1rem 0"></div>
+    <div style="font-size:15px;font-weight:500;margin-bottom:1rem">Operation charges</div>
+    <table style="max-width:360px"><thead><tr><th>Operation</th><th>Charge</th></tr></thead><tbody>
+      <tr><td>Unloading only</td><td>RO ${OP_UNLOAD.toFixed(2)}</td></tr>
+      <tr><td>Loading only</td><td>RO ${OP_UNLOAD.toFixed(2)}</td></tr>
+      <tr><td>Unloading + loading</td><td>RO ${(OP_UNLOAD*2).toFixed(2)}</td></tr>
+      <tr><td>Cross-loading</td><td>RO ${OP_CROSS.toFixed(2)}</td></tr>
+    </tbody></table>
+    <div style="height:0.5px;background:var(--border);margin:1rem 0"></div>
+    <div style="font-size:12px;color:var(--text2)">Storage accrues per calendar day from unload to load date (minimum 1 day when dates differ). Cross-loading containers accrue no storage charge.</div>`;
+}
+
+function switchTab(tab,el){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  ['yard','all','pending','invoiced','payments','unpaid','clients','rates'].forEach(t=>{
+    const e=document.getElementById('tab-'+t);if(e)e.style.display=(t===tab?'block':'none');
+  });
+  render();
+}
+
+function render(){
+  renderStats();
+  if(currentTab==='yard')renderYard();
+  else if(currentTab==='all')renderAll();
+  else if(currentTab==='pending')renderPending();
+  else if(currentTab==='invoiced')renderInvoiced();
+  else if(currentTab==='payments')renderPayments();
+  else if(currentTab==='unpaid')renderUnpaid();
+  else if(currentTab==='clients')renderClients();
+  else if(currentTab==='rates')renderRates();
+}
+
+(async function(){
+  const{data:{session}}=await sb.auth.getSession();
+  if(session)await startApp(session.user);
 })();
 </script>
 </body>
