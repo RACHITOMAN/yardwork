@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Yard Tracker</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 /* ===== DESIGN TOKENS ===== */
 :root {
@@ -1088,7 +1088,13 @@ select.form-control { cursor: pointer; background-image: none; }
 // ===== SUPABASE INIT =====
 const SUPABASE_URL = 'https://lngzmcdyyrlxchfkwbds.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ptY2R5eXJseGNoZmt3YmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU4ODEsImV4cCI6MjEwNjQ0MTg4MX0.cOFC6WKW-GnC_H2NuY3D2gmo-62UF4swrprpeyJJf04';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+if (!window.supabase) {
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;"><div style="font-size:40px">⚠️</div><div style="font-size:18px;font-weight:600">Failed to load Supabase library</div><div style="color:#666;text-align:center;max-width:400px">The app requires an internet connection to load. Please check your connection and refresh the page.</div><button onclick="location.reload()" style="margin-top:8px;padding:10px 24px;background:#1D9E75;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer">Retry</button></div>';
+  throw new Error('Supabase library not loaded');
+}
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ===== STATE =====
 let currentUser = null;
@@ -1155,7 +1161,7 @@ async function doLogin() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Signing in…';
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) { errEl.textContent = error.message; errEl.hidden = false; return; }
     await onLogin(data.user);
   } catch(e) {
@@ -1170,7 +1176,7 @@ async function doLogin() {
 async function onLogin(user) {
   currentUser = user;
   // Check if admin
-  const { data: adminData } = await supabase.from('admin_users').select('*').eq('user_id', user.id).maybeSingle();
+  const { data: adminData } = await sb.from('admin_users').select('*').eq('user_id', user.id).maybeSingle();
   if (adminData) {
     isAdmin = true;
     document.getElementById('login-screen').hidden = true;
@@ -1182,7 +1188,7 @@ async function onLogin(user) {
     return;
   }
   // Check if client user
-  const { data: clientUser } = await supabase.from('client_users').select('*, clients(*)').eq('user_id', user.id).maybeSingle();
+  const { data: clientUser } = await sb.from('client_users').select('*, clients(*)').eq('user_id', user.id).maybeSingle();
   if (clientUser) {
     isAdmin = false;
     clientRecord = clientUser.clients;
@@ -1197,11 +1203,11 @@ async function onLogin(user) {
   // Unknown user
   document.getElementById('login-error').textContent = 'Account not configured. Please contact your administrator.';
   document.getElementById('login-error').hidden = false;
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
 }
 
 async function doLogout() {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   currentUser = null;
   isAdmin = false;
   clientRecord = null;
@@ -1217,15 +1223,15 @@ async function doLogout() {
 
 // ===== SESSION RESTORE =====
 (async () => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await sb.auth.getSession();
   if (session) { await onLogin(session.user); }
 })();
 
 // ===== ADMIN DATA LOAD =====
 async function loadData() {
   const [{ data: txs }, { data: clients }] = await Promise.all([
-    supabase.from('transactions').select('*').eq('deleted', false).order('created_at', { ascending: false }),
-    supabase.from('clients').select('*').eq('deleted', false).order('name')
+    sb.from('transactions').select('*').eq('deleted', false).order('created_at', { ascending: false }),
+    sb.from('clients').select('*').eq('deleted', false).order('name')
   ]);
   allTransactions = txs || [];
   allClients = clients || [];
@@ -1409,7 +1415,7 @@ async function confirmAssignInvoice() {
   const invoiceNo = document.getElementById('f-invoice-no').value.trim();
   if (!invoiceNo) { toast('Enter invoice number', 'error'); return; }
   const ids = [...pendingInvoiceSelection];
-  const { error } = await supabase.from('transactions').update({ invoice_no: invoiceNo, invoiced: true }).in('id', ids);
+  const { error } = await sb.from('transactions').update({ invoice_no: invoiceNo, invoiced: true }).in('id', ids);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   ids.forEach(id => {
     const tx = allTransactions.find(t => t.id === id);
@@ -1585,13 +1591,13 @@ async function saveContainer() {
     data.loaded = document.getElementById('f-loaded').value === 'true';
   }
   if (id) {
-    const { error } = await supabase.from('transactions').update(data).eq('id', id);
+    const { error } = await sb.from('transactions').update(data).eq('id', id);
     if (error) { toast('Error: ' + error.message, 'error'); return; }
     const idx = allTransactions.findIndex(t => t.id === id);
     if (idx >= 0) allTransactions[idx] = { ...allTransactions[idx], ...data };
     toast('Container updated');
   } else {
-    const { data: inserted, error } = await supabase.from('transactions').insert([data]).select().single();
+    const { data: inserted, error } = await sb.from('transactions').insert([data]).select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
     allTransactions.unshift(inserted);
     toast('Container added');
@@ -1612,7 +1618,7 @@ async function confirmGateOut() {
   const id = document.getElementById('gate-out-id').value;
   const load_date = document.getElementById('gate-out-date').value;
   if (!load_date) { toast('Enter gate out date', 'error'); return; }
-  const { error } = await supabase.from('transactions').update({ loaded: true, load_date }).eq('id', id);
+  const { error } = await sb.from('transactions').update({ loaded: true, load_date }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   const tx = allTransactions.find(t => t.id === id);
   if (tx) { tx.loaded = true; tx.load_date = load_date; }
@@ -1633,7 +1639,7 @@ async function confirmMarkPaid() {
   const id = document.getElementById('paid-container-id').value;
   const paid_date = document.getElementById('paid-date').value;
   if (!paid_date) { toast('Enter payment date', 'error'); return; }
-  const { error } = await supabase.from('transactions').update({ paid_date }).eq('id', id);
+  const { error } = await sb.from('transactions').update({ paid_date }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   const tx = allTransactions.find(t => t.id === id);
   if (tx) tx.paid_date = paid_date;
@@ -1643,7 +1649,7 @@ async function confirmMarkPaid() {
 }
 
 async function unpayTransaction(id) {
-  const { error } = await supabase.from('transactions').update({ paid_date: null }).eq('id', id);
+  const { error } = await sb.from('transactions').update({ paid_date: null }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   const tx = allTransactions.find(t => t.id === id);
   if (tx) tx.paid_date = null;
@@ -1654,7 +1660,7 @@ async function unpayTransaction(id) {
 // ===== DELETE =====
 async function deleteTransaction(id) {
   if (!confirm('Delete this container record?')) return;
-  const { error } = await supabase.from('transactions').update({ deleted: true }).eq('id', id);
+  const { error } = await sb.from('transactions').update({ deleted: true }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   allTransactions = allTransactions.filter(t => t.id !== id);
   toast('Container deleted');
@@ -1698,13 +1704,13 @@ async function saveClient() {
     rate_op: parseFloat(document.getElementById('f-rate-op').value) || 25
   };
   if (id) {
-    const { error } = await supabase.from('clients').update(data).eq('id', id);
+    const { error } = await sb.from('clients').update(data).eq('id', id);
     if (error) { toast('Error: ' + error.message, 'error'); return; }
     const idx = allClients.findIndex(c => c.id === id);
     if (idx >= 0) allClients[idx] = { ...allClients[idx], ...data };
     toast('Client updated');
   } else {
-    const { data: inserted, error } = await supabase.from('clients').insert([data]).select().single();
+    const { data: inserted, error } = await sb.from('clients').insert([data]).select().single();
     if (error) { toast('Error: ' + error.message, 'error'); return; }
     allClients.push(inserted);
     allClients.sort((a,b) => a.name.localeCompare(b.name));
@@ -1717,7 +1723,7 @@ async function saveClient() {
 
 async function deleteClient(id) {
   if (!confirm('Delete this client? Their containers will remain but unlinked.')) return;
-  const { error } = await supabase.from('clients').update({ deleted: true }).eq('id', id);
+  const { error } = await sb.from('clients').update({ deleted: true }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   allClients = allClients.filter(c => c.id !== id);
   toast('Client deleted');
@@ -1748,14 +1754,14 @@ async function createClientLogin() {
   btn.innerHTML = '<span class="spinner"></span> Creating…';
   try {
     // Try to sign up — this will work with anon key for user registration
-    const { data, error } = await supabase.auth.admin ?
-      supabase.auth.admin.createUser({ email, password, email_confirm: true }) :
-      supabase.auth.signUp({ email, password });
+    const { data, error } = await sb.auth.admin ?
+      sb.auth.admin.createUser({ email, password, email_confirm: true }) :
+      sb.auth.signUp({ email, password });
     if (error) { errEl.textContent = error.message; errEl.hidden = false; return; }
     const userId = data.user?.id;
     if (!userId) { errEl.textContent = 'User created but ID not returned. Please link manually.'; errEl.hidden = false; return; }
     // Insert into client_users
-    const { error: linkError } = await supabase.from('client_users').insert([{ user_id: userId, client_id: clientId }]);
+    const { error: linkError } = await sb.from('client_users').insert([{ user_id: userId, client_id: clientId }]);
     if (linkError) { errEl.textContent = 'User created but link failed: ' + linkError.message + '. Please run: INSERT INTO client_users (user_id, client_id) VALUES (\'' + userId + '\', \'' + clientId + '\');'; errEl.hidden = false; return; }
     closeModal('modal-client-login');
     toast('Client login created successfully');
@@ -1781,7 +1787,7 @@ async function saveRate() {
   const id = document.getElementById('rate-client-id').value;
   const rate_storage = parseFloat(document.getElementById('f-edit-rate-storage').value);
   const rate_op = parseFloat(document.getElementById('f-edit-rate-op').value);
-  const { error } = await supabase.from('clients').update({ rate_storage, rate_op }).eq('id', id);
+  const { error } = await sb.from('clients').update({ rate_storage, rate_op }).eq('id', id);
   if (error) { toast('Error: ' + error.message, 'error'); return; }
   const c = allClients.find(c => c.id === id);
   if (c) { c.rate_storage = rate_storage; c.rate_op = rate_op; }
@@ -1862,7 +1868,7 @@ async function processBulkFile(file) {
 async function confirmBulkImport() {
   if (!bulkData.length) return;
   const toInsert = bulkData.map(({ client_name, ...rest }) => rest);
-  const { error } = await supabase.from('transactions').insert(toInsert);
+  const { error } = await sb.from('transactions').insert(toInsert);
   if (error) { toast('Import error: ' + error.message, 'error'); return; }
   toast(`${bulkData.length} containers imported`);
   closeModal('modal-bulk');
@@ -1909,7 +1915,7 @@ async function exportExcel(view) {
 
 // ===== CLIENT PORTAL =====
 async function loadClientData(clientId) {
-  const { data: txs } = await supabase.from('transactions').select('*').eq('client_id', clientId).eq('deleted', false).order('unload_date', { ascending: false });
+  const { data: txs } = await sb.from('transactions').select('*').eq('client_id', clientId).eq('deleted', false).order('unload_date', { ascending: false });
   const allTxs = txs || [];
   window._clientIYData = allTxs.filter(t => !t.loaded);
   window._clientCompletedData = allTxs.filter(t => t.loaded);
