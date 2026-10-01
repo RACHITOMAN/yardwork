@@ -1,0 +1,1985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Yard Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ===== DESIGN TOKENS ===== */
+:root {
+  /* Layout: fixed sidebar (desktop) / bottom-tab (mobile) with card-based content area */
+  --bg: #F5F7F9;
+  --surface: #FFFFFF;
+  --surface-2: #F0F3F6;
+  --border: #E2E8F0;
+  --border-subtle: #EEF1F5;
+  --fg: #1A2332;
+  --fg-2: #4A5568;
+  --fg-3: #8896A7;
+  --accent: #1D9E75;
+  --accent-light: #E8F7F2;
+  --accent-hover: #178A63;
+  --danger: #E53E3E;
+  --danger-light: #FFF5F5;
+  --warning: #D97706;
+  --warning-light: #FFFBEB;
+  --info: #2B6CB0;
+  --info-light: #EBF8FF;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 4px 12px rgba(0,0,0,0.08);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1923;
+    --surface: #162030;
+    --surface-2: #1C2A3A;
+    --border: #253447;
+    --border-subtle: #1E2D3F;
+    --fg: #E8EDF3;
+    --fg-2: #9BAFC4;
+    --fg-3: #5A7190;
+    --accent: #22C48E;
+    --accent-light: #0D2B22;
+    --accent-hover: #1DAD7C;
+    --danger: #FC8181;
+    --danger-light: #2D1515;
+    --warning: #F6AD55;
+    --warning-light: #2D2010;
+    --info: #63B3ED;
+    --info-light: #0D2040;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow: 0 4px 12px rgba(0,0,0,0.4);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1923;
+  --surface: #162030;
+  --surface-2: #1C2A3A;
+  --border: #253447;
+  --border-subtle: #1E2D3F;
+  --fg: #E8EDF3;
+  --fg-2: #9BAFC4;
+  --fg-3: #5A7190;
+  --accent: #22C48E;
+  --accent-light: #0D2B22;
+  --accent-hover: #1DAD7C;
+  --danger: #FC8181;
+  --danger-light: #2D1515;
+  --warning: #F6AD55;
+  --warning-light: #2D2010;
+  --info: #63B3ED;
+  --info-light: #0D2040;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow: 0 4px 12px rgba(0,0,0,0.4);
+  color-scheme: dark;
+}
+
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-decoration: none; }
+button { font-family: var(--font); cursor: pointer; border: none; background: none; }
+input, select, textarea { font-family: var(--font); font-size: 14px; color: var(--fg); }
+table { border-collapse: collapse; width: 100%; }
+[hidden] { display: none !important; }
+
+/* ===== TYPOGRAPHY ===== */
+h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.2rem; font-weight: 600; }
+h3 { font-size: 1rem; font-weight: 600; }
+
+/* ===== LAYOUT ===== */
+#app { display: flex; height: 100%; flex-direction: column; }
+#login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px 16px; background: var(--bg); }
+#main-layout { display: flex; flex: 1; overflow: hidden; }
+
+/* ===== SIDEBAR ===== */
+#sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 20px 16px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.sidebar-logo-icon {
+  width: 36px; height: 36px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.sidebar-logo-text { font-weight: 700; font-size: 15px; color: var(--fg); }
+.sidebar-logo-sub { font-size: 11px; color: var(--fg-3); font-weight: 400; }
+.sidebar-nav { padding: 12px 8px; flex: 1; }
+.nav-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); padding: 8px 8px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--fg-2);
+  font-weight: 500;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-bottom: 2px;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--fg); }
+.nav-item.active { background: var(--accent-light); color: var(--accent); }
+.nav-item svg { flex-shrink: 0; }
+.sidebar-footer { padding: 12px 8px; border-top: 1px solid var(--border-subtle); }
+.user-info { padding: 8px 10px; display: flex; align-items: center; gap: 10px; }
+.user-avatar {
+  width: 30px; height: 30px;
+  background: var(--accent-light);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  flex-shrink: 0;
+}
+.user-name { font-size: 12.5px; font-weight: 500; color: var(--fg); line-height: 1.2; }
+.user-role { font-size: 11px; color: var(--fg-3); }
+.btn-logout {
+  width: 100%;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-light);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  display: flex; align-items: center; gap: 8px;
+  transition: opacity 0.15s;
+}
+.btn-logout:hover { opacity: 0.8; }
+
+/* ===== CONTENT AREA ===== */
+#content { flex: 1; overflow-y: auto; padding: 24px 20px; min-width: 0; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.page-title { font-size: 1.25rem; font-weight: 700; color: var(--fg); }
+.page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ===== STATS ROW ===== */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.stat-label { font-size: 11.5px; color: var(--fg-3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.stat-value { font-size: 1.6rem; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; line-height: 1; }
+.stat-sub { font-size: 11.5px; color: var(--fg-3); margin-top: 4px; }
+.stat-card.accent .stat-value { color: var(--accent); }
+.stat-card.warning .stat-value { color: var(--warning); }
+
+/* ===== BUTTONS ===== */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-secondary { background: var(--surface); color: var(--fg-2); border-color: var(--border); }
+.btn-secondary:hover { background: var(--surface-2); color: var(--fg); }
+.btn-danger { background: var(--danger-light); color: var(--danger); border-color: transparent; }
+.btn-danger:hover { opacity: 0.85; }
+.btn-sm { padding: 5px 10px; font-size: 12.5px; }
+.btn-icon { padding: 6px; border-radius: var(--radius-sm); display: inline-flex; align-items: center; justify-content: center; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ===== TABLES ===== */
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
+.table-wrap-scroll { overflow-x: auto; }
+table thead th {
+  background: var(--surface-2);
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-3);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg);
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+table tbody tr:last-child td { border-bottom: none; }
+table tbody tr:hover td { background: var(--surface-2); }
+.mono { font-family: var(--font-mono); font-size: 13px; }
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.tag-green { background: var(--accent-light); color: var(--accent); }
+.tag-orange { background: var(--warning-light); color: var(--warning); }
+.tag-blue { background: var(--info-light); color: var(--info); }
+.tag-red { background: var(--danger-light); color: var(--danger); }
+.tag-gray { background: var(--surface-2); color: var(--fg-3); }
+
+/* ===== FORMS ===== */
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 12.5px; font-weight: 500; color: var(--fg-2); margin-bottom: 5px; }
+.form-control {
+  width: 100%;
+  padding: 8px 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 13.5px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.form-control::placeholder { color: var(--fg-3); }
+select.form-control { cursor: pointer; background-image: none; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-error { color: var(--danger); font-size: 12px; margin-top: 4px; }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+.modal-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.modal-title { font-weight: 600; font-size: 15px; }
+.modal-close { color: var(--fg-3); border-radius: var(--radius-sm); padding: 4px; transition: color 0.15s, background 0.15s; display: flex; }
+.modal-close:hover { color: var(--fg); background: var(--surface-2); }
+.modal-body { padding: 18px 20px; }
+.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ===== LOGIN ===== */
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--shadow);
+}
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo-icon {
+  width: 56px; height: 56px;
+  background: var(--accent);
+  border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px;
+  margin: 0 auto 12px;
+}
+.login-logo-text { font-size: 1.3rem; font-weight: 700; }
+.login-logo-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+.login-error { background: var(--danger-light); color: var(--danger); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+
+/* ===== LOADING ===== */
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay {
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px; color: var(--fg-3); gap: 12px;
+}
+
+/* ===== ALERTS / TOASTS ===== */
+#toast-container {
+  position: fixed; top: 16px; right: 16px;
+  z-index: 2000;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  max-width: 320px;
+  display: flex; align-items: flex-start; gap: 10px;
+  pointer-events: all;
+  animation: slide-in 0.2s ease;
+}
+.toast-success { border-left: 3px solid var(--accent); }
+.toast-error { border-left: 3px solid var(--danger); }
+.toast-info { border-left: 3px solid var(--info); }
+@keyframes slide-in { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ===== EMPTY STATE ===== */
+.empty-state { text-align: center; padding: 48px 24px; color: var(--fg-3); }
+.empty-state-icon { font-size: 2.5rem; margin-bottom: 12px; }
+.empty-state h3 { color: var(--fg-2); margin-bottom: 6px; }
+.empty-state p { font-size: 13px; }
+
+/* ===== FILTER BAR ===== */
+.filter-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.search-input { flex: 1; min-width: 180px; max-width: 280px; }
+
+/* ===== BADGE ===== */
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: var(--accent); color: #fff;
+  border-radius: 20px; font-size: 10px; font-weight: 700;
+}
+
+/* ===== DIVIDER ===== */
+.divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+/* ===== BULK UPLOAD ===== */
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  text-align: center;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-light); }
+.dropzone-icon { font-size: 2rem; margin-bottom: 8px; }
+
+/* ===== CLIENT PORTAL ===== */
+.client-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap;
+}
+.client-header-logo { display: flex; align-items: center; gap: 10px; }
+.client-tabs { display: flex; gap: 4px; }
+.client-tab {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px; font-weight: 500;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.client-tab.active { background: var(--accent-light); color: var(--accent); }
+.client-tab:hover:not(.active) { background: var(--surface-2); color: var(--fg); }
+.client-content { padding: 20px; max-width: 1100px; }
+
+/* ===== MOBILE ===== */
+@media (max-width: 700px) {
+  #sidebar { display: none; }
+  #content { padding: 16px 12px; }
+  .form-row { grid-template-columns: 1fr; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .page-header { flex-direction: column; align-items: flex-start; }
+  .modal { margin: 0; max-height: 100vh; border-radius: var(--radius) var(--radius) 0 0; align-self: flex-end; }
+  .modal-overlay { align-items: flex-end; }
+  .client-header { flex-direction: column; align-items: flex-start; }
+  .client-content { padding: 12px; }
+  #mobile-nav {
+    display: flex;
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  #content { padding-bottom: 70px; }
+}
+@media (min-width: 701px) {
+  #mobile-nav { display: none; }
+}
+#mobile-nav .mob-nav-item {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 8px 4px;
+  font-size: 10px; color: var(--fg-3); font-weight: 500;
+  cursor: pointer; gap: 3px;
+}
+#mobile-nav .mob-nav-item.active { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+<div id="app">
+  <!-- LOGIN -->
+  <div id="login-screen">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">📦</div>
+        <div class="login-logo-text">Yard Tracker</div>
+        <div class="login-logo-sub">Container Yard Management</div>
+      </div>
+      <div id="login-error" class="login-error" hidden></div>
+      <div class="form-group">
+        <label class="form-label" for="login-email">Email address</label>
+        <input id="login-email" type="email" class="form-control" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-password">Password</label>
+        <input id="login-password" type="password" class="form-control" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button id="login-btn" class="btn btn-primary" style="width:100%;justify-content:center;padding:10px;">
+        Sign in
+      </button>
+    </div>
+  </div>
+
+  <!-- ADMIN LAYOUT -->
+  <div id="main-layout" hidden>
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-icon">📦</div>
+        <div>
+          <div class="sidebar-logo-text">Yard Tracker</div>
+          <div class="sidebar-logo-sub">Admin Portal</div>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-label">Operations</div>
+        <div class="nav-item active" data-tab="in-yard">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          In Yard
+        </div>
+        <div class="nav-item" data-tab="pending-invoice">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          Pending Invoice
+        </div>
+        <div class="nav-item" data-tab="invoiced">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Invoiced
+        </div>
+        <div class="nav-item" data-tab="payments">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/></svg>
+          Payments
+        </div>
+        <div class="nav-label" style="margin-top:8px;">Management</div>
+        <div class="nav-item" data-tab="clients">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Clients
+        </div>
+        <div class="nav-item" data-tab="rates">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          Rates
+        </div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar-initials">A</div>
+          <div>
+            <div class="user-name" id="sidebar-user-name">Admin</div>
+            <div class="user-role">Administrator</div>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
+        </button>
+      </div>
+    </aside>
+
+    <!-- Mobile Nav -->
+    <div id="mobile-nav">
+      <div class="mob-nav-item active" data-tab="in-yard">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        In Yard
+      </div>
+      <div class="mob-nav-item" data-tab="pending-invoice">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Invoice
+      </div>
+      <div class="mob-nav-item" data-tab="invoiced">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/></svg>
+        Invoiced
+      </div>
+      <div class="mob-nav-item" data-tab="clients">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        Clients
+      </div>
+    </div>
+
+    <!-- Content -->
+    <main id="content">
+      <!-- IN YARD TAB -->
+      <div id="tab-in-yard">
+        <div class="page-header">
+          <div class="page-title">In Yard</div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" onclick="openBulkUpload()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Bulk Upload
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="openAddContainer()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Container
+            </button>
+          </div>
+        </div>
+        <div id="in-yard-stats" class="stats-row"></div>
+        <div class="filter-bar">
+          <input type="text" id="search-in-yard" class="form-control search-input" placeholder="Search container or client…" oninput="renderInYard()">
+          <select id="filter-client-iy" class="form-control" style="max-width:180px;" onchange="renderInYard()">
+            <option value="">All Clients</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="exportExcel('in-yard')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export
+          </button>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-in-yard">
+              <thead><tr>
+                <th>Container No.</th><th>Client</th><th>Gate In</th><th>Days</th>
+                <th>Op Type</th><th>Sales Ref</th><th>Remarks</th>
+                <th>Storage Cost</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="tbody-in-yard"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PENDING INVOICE TAB -->
+      <div id="tab-pending-invoice" hidden>
+        <div class="page-header">
+          <div class="page-title">Pending Invoice</div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportExcel('pending-invoice')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="bulkAssignInvoice()">Assign Invoice Numbers</button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="search-pending" class="form-control search-input" placeholder="Search…" oninput="renderPending()">
+          <select id="filter-client-pi" class="form-control" style="max-width:180px;" onchange="renderPending()">
+            <option value="">All Clients</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-pending">
+              <thead><tr>
+                <th><input type="checkbox" id="check-all-pending" onchange="toggleAllPending(this)"></th>
+                <th>Container No.</th><th>Client</th><th>Gate In</th><th>Gate Out</th>
+                <th>Days</th><th>Op</th><th>Storage</th><th>Op Cost</th><th>Total</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="tbody-pending"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVOICED TAB -->
+      <div id="tab-invoiced" hidden>
+        <div class="page-header">
+          <div class="page-title">Invoiced</div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportExcel('invoiced')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+          </div>
+        </div>
+        <div class="filter-bar">
+          <input type="text" id="search-invoiced" class="form-control search-input" placeholder="Search…" oninput="renderInvoiced()">
+          <select id="filter-client-inv" class="form-control" style="max-width:180px;" onchange="renderInvoiced()">
+            <option value="">All Clients</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-invoiced">
+              <thead><tr>
+                <th>Invoice No.</th><th>Container No.</th><th>Client</th><th>Gate In</th>
+                <th>Gate Out</th><th>Days</th><th>Total</th><th>Status</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="tbody-invoiced"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PAYMENTS TAB -->
+      <div id="tab-payments" hidden>
+        <div class="page-header">
+          <div class="page-title">Payments</div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" onclick="exportExcel('payments')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export
+            </button>
+          </div>
+        </div>
+        <div id="payments-stats" class="stats-row"></div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-payments">
+              <thead><tr>
+                <th>Invoice No.</th><th>Container No.</th><th>Client</th>
+                <th>Total</th><th>Paid Date</th><th>Status</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="tbody-payments"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLIENTS TAB -->
+      <div id="tab-clients" hidden>
+        <div class="page-header">
+          <div class="page-title">Clients</div>
+          <div class="page-actions">
+            <button class="btn btn-primary btn-sm" onclick="openAddClient()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add Client
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-clients">
+              <thead><tr>
+                <th>Client Name</th><th>Contact</th><th>Email</th>
+                <th>Storage Rate (RO/day)</th><th>Op Rate (RO)</th>
+                <th>Portal Access</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="tbody-clients"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- RATES TAB -->
+      <div id="tab-rates" hidden>
+        <div class="page-header">
+          <div class="page-title">Rate Management</div>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table id="table-rates">
+              <thead><tr>
+                <th>Client</th>
+                <th>Storage Rate (RO/day)</th>
+                <th>Operation Rate (RO)</th>
+                <th>Action</th>
+              </tr></thead>
+              <tbody id="tbody-rates"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- CLIENT PORTAL -->
+  <div id="client-portal" hidden style="display:flex;flex-direction:column;min-height:100vh;">
+    <div class="client-header">
+      <div class="client-header-logo">
+        <div class="sidebar-logo-icon" style="width:32px;height:32px;font-size:16px;">📦</div>
+        <div>
+          <div style="font-weight:700;font-size:15px;">Yard Tracker</div>
+          <div style="font-size:11.5px;color:var(--fg-3);">Viewing as: <span id="client-portal-name" style="color:var(--fg-2);font-weight:500;"></span></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="client-tabs">
+          <div class="client-tab active" onclick="switchClientTab('in-yard-client')">In Yard</div>
+          <div class="client-tab" onclick="switchClientTab('completed-client')">Completed</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="doLogout()">Sign out</button>
+      </div>
+    </div>
+    <div class="client-content" style="flex:1;">
+      <!-- In Yard Client -->
+      <div id="in-yard-client">
+        <div class="page-header">
+          <div class="page-title">Containers In Yard</div>
+          <button class="btn btn-secondary btn-sm" onclick="exportExcel('client-in-yard')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Excel
+          </button>
+        </div>
+        <div id="client-iy-stats" class="stats-row"></div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table>
+              <thead><tr>
+                <th>Container No.</th><th>Gate In Date</th><th>Days in Yard</th>
+                <th>Op Type</th><th>Remarks</th>
+              </tr></thead>
+              <tbody id="tbody-client-iy"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Completed Client -->
+      <div id="completed-client" hidden>
+        <div class="page-header">
+          <div class="page-title">Completed Containers</div>
+          <button class="btn btn-secondary btn-sm" onclick="exportExcel('client-completed')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Excel
+          </button>
+        </div>
+        <div class="table-wrap">
+          <div class="table-wrap-scroll">
+            <table>
+              <thead><tr>
+                <th>Container No.</th><th>Gate In</th><th>Gate Out</th>
+                <th>Days</th><th>Op Type</th><th>Remarks</th>
+              </tr></thead>
+              <tbody id="tbody-client-completed"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- Add/Edit Container Modal -->
+<div id="modal-container" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-container-title">Add Container</div>
+      <button class="modal-close" onclick="closeModal('modal-container')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-container-id">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Container No. *</label>
+          <input id="f-container-no" class="form-control" placeholder="e.g. MSCU1234567" style="text-transform:uppercase;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Client *</label>
+          <select id="f-client" class="form-control"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Operation Type *</label>
+          <select id="f-op" class="form-control">
+            <option value="unload">Unload</option>
+            <option value="cross">Cross-load</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gate In Date *</label>
+          <input id="f-unload-date" type="date" class="form-control">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Sales Ref</label>
+          <input id="f-sales-ref" class="form-control" placeholder="e.g. SO-1234">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Remarks</label>
+          <input id="f-remarks" class="form-control" placeholder="Optional notes">
+        </div>
+      </div>
+      <div id="gate-out-row" class="form-row" hidden>
+        <div class="form-group">
+          <label class="form-label">Gate Out Date</label>
+          <input id="f-load-date" type="date" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Loaded?</label>
+          <select id="f-loaded" class="form-control">
+            <option value="false">No (still in yard)</option>
+            <option value="true">Yes (gate out)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-container')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveContainer()">Save Container</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gate Out / Mark Loaded Modal -->
+<div id="modal-gate-out" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">Mark as Gate Out</div>
+      <button class="modal-close" onclick="closeModal('modal-gate-out')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:14px;color:var(--fg-2);font-size:13.5px;">Set the gate out date for <strong id="gate-out-container-no"></strong></p>
+      <input type="hidden" id="gate-out-id">
+      <div class="form-group">
+        <label class="form-label">Gate Out Date *</label>
+        <input id="gate-out-date" type="date" class="form-control">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-gate-out')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmGateOut()">Confirm Gate Out</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Invoice Modal -->
+<div id="modal-invoice" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">Assign Invoice Number</div>
+      <button class="modal-close" onclick="closeModal('modal-invoice')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="invoice-containers-list" style="margin-bottom:14px;max-height:200px;overflow-y:auto;"></div>
+      <div class="form-group">
+        <label class="form-label">Invoice Number *</label>
+        <input id="f-invoice-no" class="form-control" placeholder="e.g. INV-2024-001">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-invoice')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmAssignInvoice()">Assign Invoice</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mark Paid Modal -->
+<div id="modal-paid" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">Mark as Paid</div>
+      <button class="modal-close" onclick="closeModal('modal-paid')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:14px;color:var(--fg-2);font-size:13.5px;">Invoice: <strong id="paid-invoice-no"></strong></p>
+      <input type="hidden" id="paid-container-id">
+      <div class="form-group">
+        <label class="form-label">Payment Date *</label>
+        <input id="paid-date" type="date" class="form-control">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-paid')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMarkPaid()">Mark Paid</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Client Modal -->
+<div id="modal-client" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-client-title">Add Client</div>
+      <button class="modal-close" onclick="closeModal('modal-client')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-client-id">
+      <div class="form-group">
+        <label class="form-label">Client Name *</label>
+        <input id="f-client-name" class="form-control" placeholder="Company or person name">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Contact Person</label>
+          <input id="f-client-contact" class="form-control" placeholder="Name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="f-client-email" type="email" class="form-control" placeholder="email@example.com">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Storage Rate (RO/day)</label>
+          <input id="f-rate-storage" type="number" step="0.5" min="0" class="form-control" placeholder="1.5">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Op Rate (RO/operation)</label>
+          <input id="f-rate-op" type="number" step="1" min="0" class="form-control" placeholder="25">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-client')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveClient()">Save Client</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Client Login Modal -->
+<div id="modal-client-login" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">Create Client Login</div>
+      <button class="modal-close" onclick="closeModal('modal-client-login')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:14px;color:var(--fg-2);font-size:13.5px;">Create a Supabase Auth login for <strong id="cl-client-name"></strong>. The user will be able to log in and see their own containers.</p>
+      <input type="hidden" id="cl-client-id">
+      <div class="form-group">
+        <label class="form-label">Login Email *</label>
+        <input id="cl-email" type="email" class="form-control" placeholder="client@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password *</label>
+        <input id="cl-password" type="password" class="form-control" placeholder="min. 6 characters">
+      </div>
+      <div id="cl-error" class="login-error" hidden></div>
+      <p style="font-size:12px;color:var(--fg-3);margin-top:8px;">
+        ⚠️ Creating users requires the <strong>service_role</strong> key, not the anon key. If this fails, create the user manually in Supabase Auth dashboard, then run the SQL in the setup guide to link them.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-client-login')">Cancel</button>
+      <button class="btn btn-primary" id="cl-save-btn" onclick="createClientLogin()">Create Login</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Upload Modal -->
+<div id="modal-bulk" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <div class="modal-title">Bulk Upload Containers</div>
+      <button class="modal-close" onclick="closeModal('modal-bulk')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:12px;color:var(--fg-2);font-size:13px;">Upload an Excel file with columns: <strong>Container No, Client Name, Op Type (unload/cross), Gate In Date (YYYY-MM-DD), Sales Ref, Remarks</strong></p>
+      <div class="dropzone" id="bulk-dropzone" onclick="document.getElementById('bulk-file').click()">
+        <div class="dropzone-icon">📂</div>
+        <div style="font-weight:500;margin-bottom:4px;">Click to browse or drop file here</div>
+        <div style="font-size:12px;">.xlsx or .xls files only</div>
+      </div>
+      <input type="file" id="bulk-file" accept=".xlsx,.xls" hidden onchange="handleBulkFile(this)">
+      <div id="bulk-preview" style="margin-top:14px;" hidden>
+        <div style="font-weight:500;margin-bottom:8px;">Preview (<span id="bulk-row-count">0</span> rows)</div>
+        <div style="max-height:200px;overflow-y:auto;">
+          <table id="table-bulk-preview" style="font-size:12.5px;">
+            <thead><tr id="bulk-preview-head"></tr></thead>
+            <tbody id="bulk-preview-body"></tbody>
+          </table>
+        </div>
+        <div id="bulk-errors" style="margin-top:8px;color:var(--danger);font-size:12.5px;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-bulk')">Cancel</button>
+      <button class="btn btn-primary" id="bulk-import-btn" onclick="confirmBulkImport()" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Rate Modal -->
+<div id="modal-rate" class="modal-overlay" hidden>
+  <div class="modal" style="max-width:360px;">
+    <div class="modal-header">
+      <div class="modal-title">Edit Rate</div>
+      <button class="modal-close" onclick="closeModal('modal-rate')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="rate-client-id">
+      <p style="margin-bottom:14px;font-weight:500;" id="rate-client-name"></p>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Storage Rate (RO/day)</label>
+          <input id="f-edit-rate-storage" type="number" step="0.5" min="0" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Op Rate (RO)</label>
+          <input id="f-edit-rate-op" type="number" step="1" min="0" class="form-control">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-rate')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRate()">Save Rate</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== SUPABASE INIT =====
+const SUPABASE_URL = 'https://lngzmcdyyrlxchfkwbds.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ptY2R5eXJseGNoZmt3YmRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NjU4ODEsImV4cCI6MjEwNjQ0MTg4MX0.cOFC6WKW-GnC_H2NuY3D2gmo-62UF4swrprpeyJJf04';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ===== STATE =====
+let currentUser = null;
+let isAdmin = false;
+let clientRecord = null; // for client portal
+let allTransactions = [];
+let allClients = [];
+let currentTab = 'in-yard';
+let bulkData = [];
+let pendingInvoiceSelection = new Set();
+
+// ===== HELPERS =====
+function today() { return new Date().toISOString().split('T')[0]; }
+function parseDate(s) { if (!s) return null; return new Date(s + 'T00:00:00'); }
+function daysBetween(a, b) {
+  if (!a) return 0;
+  const d1 = parseDate(a), d2 = b ? parseDate(b) : new Date();
+  const ms = d2 - d1;
+  return Math.max(0, Math.floor(ms / 86400000));
+}
+function fmtDate(s) { if (!s) return '—'; const d = parseDate(s); return d ? d.toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function fmtRO(n) { return 'RO ' + Number(n || 0).toFixed(3); }
+function calcStorage(tx) {
+  const client = allClients.find(c => c.id === tx.client_id);
+  const rate = client ? (client.rate_storage || 1.5) : 1.5;
+  const days = daysBetween(tx.unload_date, tx.load_date || null);
+  return days * rate;
+}
+function calcOp(tx) {
+  const client = allClients.find(c => c.id === tx.client_id);
+  const rate = client ? (client.rate_op || 25) : 25;
+  return rate;
+}
+function calcTotal(tx) { return calcStorage(tx) + calcOp(tx); }
+function clientName(id) { const c = allClients.find(c => c.id === id); return c ? c.name : '—'; }
+function getInitials(email) { if (!email) return 'A'; return email[0].toUpperCase(); }
+function escHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ===== TOAST =====
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+  el.innerHTML = `<span style="font-weight:600;color:${type==='success'?'var(--accent)':type==='error'?'var(--danger)':'var(--info)'}">${icon}</span> <span>${escHtml(msg)}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ===== MODAL HELPERS =====
+function openModal(id) { document.getElementById(id).hidden = false; }
+function closeModal(id) { document.getElementById(id).hidden = true; }
+
+// ===== LOGIN =====
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  const btn = document.getElementById('login-btn');
+  errEl.hidden = true;
+  if (!email || !password) { errEl.textContent = 'Please enter email and password.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Signing in…';
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) { errEl.textContent = error.message; errEl.hidden = false; return; }
+    await onLogin(data.user);
+  } catch(e) {
+    errEl.textContent = 'Login failed. Please try again.';
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Sign in';
+  }
+}
+
+async function onLogin(user) {
+  currentUser = user;
+  // Check if admin
+  const { data: adminData } = await supabase.from('admin_users').select('*').eq('user_id', user.id).maybeSingle();
+  if (adminData) {
+    isAdmin = true;
+    document.getElementById('login-screen').hidden = true;
+    document.getElementById('main-layout').hidden = false;
+    document.getElementById('client-portal').hidden = true;
+    document.getElementById('sidebar-user-name').textContent = adminData.name || user.email;
+    document.getElementById('user-avatar-initials').textContent = getInitials(adminData.name || user.email);
+    await loadData();
+    return;
+  }
+  // Check if client user
+  const { data: clientUser } = await supabase.from('client_users').select('*, clients(*)').eq('user_id', user.id).maybeSingle();
+  if (clientUser) {
+    isAdmin = false;
+    clientRecord = clientUser.clients;
+    document.getElementById('login-screen').hidden = true;
+    document.getElementById('main-layout').hidden = true;
+    document.getElementById('client-portal').removeAttribute('hidden');
+    document.getElementById('client-portal').style.display = 'flex';
+    document.getElementById('client-portal-name').textContent = clientRecord.name;
+    await loadClientData(clientUser.client_id);
+    return;
+  }
+  // Unknown user
+  document.getElementById('login-error').textContent = 'Account not configured. Please contact your administrator.';
+  document.getElementById('login-error').hidden = false;
+  await supabase.auth.signOut();
+}
+
+async function doLogout() {
+  await supabase.auth.signOut();
+  currentUser = null;
+  isAdmin = false;
+  clientRecord = null;
+  allTransactions = [];
+  allClients = [];
+  document.getElementById('main-layout').hidden = true;
+  document.getElementById('client-portal').hidden = true;
+  document.getElementById('client-portal').style.display = 'none';
+  document.getElementById('login-screen').hidden = false;
+  document.getElementById('login-email').value = '';
+  document.getElementById('login-password').value = '';
+}
+
+// ===== SESSION RESTORE =====
+(async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) { await onLogin(session.user); }
+})();
+
+// ===== ADMIN DATA LOAD =====
+async function loadData() {
+  const [{ data: txs }, { data: clients }] = await Promise.all([
+    supabase.from('transactions').select('*').eq('deleted', false).order('created_at', { ascending: false }),
+    supabase.from('clients').select('*').eq('deleted', false).order('name')
+  ]);
+  allTransactions = txs || [];
+  allClients = clients || [];
+  populateClientFilters();
+  renderCurrentTab();
+}
+
+function populateClientFilters() {
+  const opts = allClients.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  ['filter-client-iy','filter-client-pi','filter-client-inv'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.innerHTML = '<option value="">All Clients</option>' + opts; }
+  });
+  // Also populate container modal client dropdown
+  const fc = document.getElementById('f-client');
+  if (fc) fc.innerHTML = '<option value="">Select client…</option>' + opts;
+}
+
+// ===== TAB NAVIGATION =====
+document.querySelectorAll('[data-tab]').forEach(el => {
+  el.addEventListener('click', () => switchTab(el.dataset.tab));
+});
+
+function switchTab(tab) {
+  currentTab = tab;
+  // Sidebar
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  document.querySelectorAll('.mob-nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  // Panels
+  ['in-yard','pending-invoice','invoiced','payments','clients','rates'].forEach(t => {
+    document.getElementById(`tab-${t}`).hidden = t !== tab;
+  });
+  renderCurrentTab();
+}
+
+function renderCurrentTab() {
+  switch(currentTab) {
+    case 'in-yard': renderInYard(); break;
+    case 'pending-invoice': renderPending(); break;
+    case 'invoiced': renderInvoiced(); break;
+    case 'payments': renderPayments(); break;
+    case 'clients': renderClients(); break;
+    case 'rates': renderRates(); break;
+  }
+}
+
+// ===== IN YARD =====
+function getInYard() {
+  return allTransactions.filter(t => !t.loaded && !t.deleted);
+}
+
+function renderInYard() {
+  const search = document.getElementById('search-in-yard').value.toLowerCase();
+  const clientFilter = document.getElementById('filter-client-iy').value;
+  let rows = getInYard();
+  if (search) rows = rows.filter(t => t.container_no.toLowerCase().includes(search) || clientName(t.client_id).toLowerCase().includes(search));
+  if (clientFilter) rows = rows.filter(t => t.client_id === clientFilter);
+
+  // Stats
+  const totalDays = rows.reduce((s, t) => s + daysBetween(t.unload_date), 0);
+  const totalCost = rows.reduce((s, t) => s + calcStorage(t), 0);
+  document.getElementById('in-yard-stats').innerHTML = `
+    <div class="stat-card accent"><div class="stat-label">In Yard</div><div class="stat-value">${rows.length}</div><div class="stat-sub">containers</div></div>
+    <div class="stat-card"><div class="stat-label">Total Days</div><div class="stat-value">${totalDays}</div><div class="stat-sub">accruing storage</div></div>
+    <div class="stat-card warning"><div class="stat-label">Storage Accrued</div><div class="stat-value" style="font-size:1.2rem;">${fmtRO(totalCost)}</div><div class="stat-sub">pending gate-out</div></div>
+  `;
+
+  const tbody = document.getElementById('tbody-in-yard');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-state-icon">📦</div><h3>No containers in yard</h3><p>Add a container to get started.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => {
+    const days = daysBetween(t.unload_date);
+    const cost = calcStorage(t);
+    const opBadge = t.op === 'cross' ? `<span class="tag tag-blue">Cross-load</span>` : `<span class="tag tag-green">Unload</span>`;
+    return `<tr>
+      <td><span class="mono" style="font-weight:500;">${escHtml(t.container_no)}</span></td>
+      <td>${escHtml(clientName(t.client_id))}</td>
+      <td>${fmtDate(t.unload_date)}</td>
+      <td><span class="tag ${days > 30 ? 'tag-red' : days > 14 ? 'tag-orange' : 'tag-gray'}" style="font-variant-numeric:tabular-nums;">${days}d</span></td>
+      <td>${opBadge}</td>
+      <td style="color:var(--fg-3);">${escHtml(t.sales_ref || '—')}</td>
+      <td style="color:var(--fg-3);">${escHtml(t.remarks || '—')}</td>
+      <td style="font-variant-numeric:tabular-nums;">${fmtRO(cost)}</td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <button class="btn btn-sm btn-secondary" onclick="openGateOut('${t.id}','${escHtml(t.container_no)}')">Gate Out</button>
+          <button class="btn btn-sm btn-secondary btn-icon" title="Edit" onclick="openEditContainer('${t.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="deleteTransaction('${t.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== PENDING INVOICE =====
+function getPending() {
+  return allTransactions.filter(t => t.loaded && !t.invoiced && !t.deleted);
+}
+
+function renderPending() {
+  const search = document.getElementById('search-pending').value.toLowerCase();
+  const clientFilter = document.getElementById('filter-client-pi').value;
+  let rows = getPending();
+  if (search) rows = rows.filter(t => t.container_no.toLowerCase().includes(search) || clientName(t.client_id).toLowerCase().includes(search));
+  if (clientFilter) rows = rows.filter(t => t.client_id === clientFilter);
+
+  const tbody = document.getElementById('tbody-pending');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><div class="empty-state-icon">📄</div><h3>No pending invoices</h3><p>Gate-out containers will appear here.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => {
+    const days = daysBetween(t.unload_date, t.load_date);
+    const storage = calcStorage(t);
+    const op = calcOp(t);
+    const total = storage + op;
+    const checked = pendingInvoiceSelection.has(t.id) ? 'checked' : '';
+    return `<tr>
+      <td><input type="checkbox" ${checked} onchange="togglePendingSelect('${t.id}', this.checked)"></td>
+      <td><span class="mono" style="font-weight:500;">${escHtml(t.container_no)}</span></td>
+      <td>${escHtml(clientName(t.client_id))}</td>
+      <td>${fmtDate(t.unload_date)}</td>
+      <td>${fmtDate(t.load_date)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${days}d</td>
+      <td><span class="tag ${t.op==='cross'?'tag-blue':'tag-green'}">${t.op==='cross'?'Cross':'Unload'}</span></td>
+      <td style="font-variant-numeric:tabular-nums;">${fmtRO(storage)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${fmtRO(op)}</td>
+      <td style="font-variant-numeric:tabular-nums;font-weight:600;">${fmtRO(total)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="openSingleInvoice('${t.id}')">Invoice</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleAllPending(cb) {
+  const rows = getPending();
+  rows.forEach(t => {
+    if (cb.checked) pendingInvoiceSelection.add(t.id);
+    else pendingInvoiceSelection.delete(t.id);
+  });
+  renderPending();
+}
+
+function togglePendingSelect(id, checked) {
+  if (checked) pendingInvoiceSelection.add(id);
+  else pendingInvoiceSelection.delete(id);
+}
+
+function bulkAssignInvoice() {
+  const sel = [...pendingInvoiceSelection];
+  if (!sel.length) { toast('Select containers first', 'error'); return; }
+  const txs = allTransactions.filter(t => sel.includes(t.id));
+  document.getElementById('invoice-containers-list').innerHTML = `
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;font-size:13px;">
+      <strong>${txs.length} containers:</strong> ${txs.map(t => `<span class="mono">${escHtml(t.container_no)}</span>`).join(', ')}
+    </div>`;
+  document.getElementById('f-invoice-no').value = '';
+  openModal('modal-invoice');
+}
+
+function openSingleInvoice(id) {
+  pendingInvoiceSelection.clear();
+  pendingInvoiceSelection.add(id);
+  const tx = allTransactions.find(t => t.id === id);
+  document.getElementById('invoice-containers-list').innerHTML = `
+    <div style="background:var(--surface-2);border-radius:var(--radius-sm);padding:10px;font-size:13px;">
+      <strong>Container:</strong> <span class="mono">${escHtml(tx.container_no)}</span>
+    </div>`;
+  document.getElementById('f-invoice-no').value = '';
+  openModal('modal-invoice');
+}
+
+async function confirmAssignInvoice() {
+  const invoiceNo = document.getElementById('f-invoice-no').value.trim();
+  if (!invoiceNo) { toast('Enter invoice number', 'error'); return; }
+  const ids = [...pendingInvoiceSelection];
+  const { error } = await supabase.from('transactions').update({ invoice_no: invoiceNo, invoiced: true }).in('id', ids);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  ids.forEach(id => {
+    const tx = allTransactions.find(t => t.id === id);
+    if (tx) { tx.invoice_no = invoiceNo; tx.invoiced = true; }
+  });
+  pendingInvoiceSelection.clear();
+  closeModal('modal-invoice');
+  toast(`Invoice ${invoiceNo} assigned to ${ids.length} container(s)`);
+  renderCurrentTab();
+}
+
+// ===== INVOICED =====
+function getInvoiced() {
+  return allTransactions.filter(t => t.invoiced && !t.paid_date && !t.deleted);
+}
+
+function renderInvoiced() {
+  const search = document.getElementById('search-invoiced').value.toLowerCase();
+  const clientFilter = document.getElementById('filter-client-inv').value;
+  let rows = getInvoiced();
+  if (search) rows = rows.filter(t => t.container_no.toLowerCase().includes(search) || (t.invoice_no||'').toLowerCase().includes(search) || clientName(t.client_id).toLowerCase().includes(search));
+  if (clientFilter) rows = rows.filter(t => t.client_id === clientFilter);
+
+  const tbody = document.getElementById('tbody-invoiced');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty-state"><div class="empty-state-icon">✅</div><h3>All invoices paid</h3><p>Paid invoices appear in Payments.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => {
+    const total = calcTotal(t);
+    return `<tr>
+      <td><span class="mono" style="font-weight:500;">${escHtml(t.invoice_no || '—')}</span></td>
+      <td><span class="mono">${escHtml(t.container_no)}</span></td>
+      <td>${escHtml(clientName(t.client_id))}</td>
+      <td>${fmtDate(t.unload_date)}</td>
+      <td>${fmtDate(t.load_date)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${daysBetween(t.unload_date, t.load_date)}d</td>
+      <td style="font-variant-numeric:tabular-nums;font-weight:600;">${fmtRO(total)}</td>
+      <td><span class="tag tag-orange">Awaiting Payment</span></td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="openMarkPaid('${t.id}','${escHtml(t.invoice_no)}')">Mark Paid</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ===== PAYMENTS =====
+function getPayments() {
+  return allTransactions.filter(t => t.paid_date && !t.deleted);
+}
+
+function renderPayments() {
+  const rows = getPayments();
+  const totalPaid = rows.reduce((s, t) => s + calcTotal(t), 0);
+  const thisMonth = rows.filter(t => {
+    const pd = parseDate(t.paid_date);
+    const now = new Date();
+    return pd && pd.getMonth() === now.getMonth() && pd.getFullYear() === now.getFullYear();
+  });
+  const thisMonthTotal = thisMonth.reduce((s, t) => s + calcTotal(t), 0);
+
+  document.getElementById('payments-stats').innerHTML = `
+    <div class="stat-card accent"><div class="stat-label">Total Paid</div><div class="stat-value" style="font-size:1.2rem;">${fmtRO(totalPaid)}</div><div class="stat-sub">${rows.length} transactions</div></div>
+    <div class="stat-card"><div class="stat-label">This Month</div><div class="stat-value" style="font-size:1.2rem;">${fmtRO(thisMonthTotal)}</div><div class="stat-sub">${thisMonth.length} payments</div></div>
+  `;
+
+  const tbody = document.getElementById('tbody-payments');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">💳</div><h3>No payments yet</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(t => `<tr>
+    <td><span class="mono" style="font-weight:500;">${escHtml(t.invoice_no || '—')}</span></td>
+    <td><span class="mono">${escHtml(t.container_no)}</span></td>
+    <td>${escHtml(clientName(t.client_id))}</td>
+    <td style="font-variant-numeric:tabular-nums;font-weight:600;">${fmtRO(calcTotal(t))}</td>
+    <td>${fmtDate(t.paid_date)}</td>
+    <td><span class="tag tag-green">Paid</span></td>
+    <td><button class="btn btn-sm btn-danger" onclick="unpayTransaction('${t.id}')">Undo</button></td>
+  </tr>`).join('');
+}
+
+// ===== CLIENTS =====
+function renderClients() {
+  const tbody = document.getElementById('tbody-clients');
+  if (!allClients.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">👥</div><h3>No clients yet</h3><p>Add your first client to get started.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allClients.map(c => `<tr>
+    <td style="font-weight:500;">${escHtml(c.name)}</td>
+    <td style="color:var(--fg-3);">${escHtml(c.contact || '—')}</td>
+    <td style="color:var(--fg-3);">${escHtml(c.email || '—')}</td>
+    <td style="font-variant-numeric:tabular-nums;">RO ${Number(c.rate_storage||1.5).toFixed(3)}/day</td>
+    <td style="font-variant-numeric:tabular-nums;">RO ${Number(c.rate_op||25).toFixed(3)}</td>
+    <td>
+      <button class="btn btn-sm btn-secondary" onclick="openCreateClientLogin('${c.id}','${escHtml(c.name)}')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        Portal Login
+      </button>
+    </td>
+    <td>
+      <div style="display:flex;gap:4px;">
+        <button class="btn btn-sm btn-secondary btn-icon" title="Edit" onclick="openEditClient('${c.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="deleteClient('${c.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </td>
+  </tr>`).join('');
+}
+
+// ===== RATES =====
+function renderRates() {
+  const tbody = document.getElementById('tbody-rates');
+  if (!allClients.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state"><div class="empty-state-icon">💵</div><h3>No clients</h3></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allClients.map(c => `<tr>
+    <td style="font-weight:500;">${escHtml(c.name)}</td>
+    <td style="font-variant-numeric:tabular-nums;">RO ${Number(c.rate_storage||1.5).toFixed(3)}/day</td>
+    <td style="font-variant-numeric:tabular-nums;">RO ${Number(c.rate_op||25).toFixed(3)}/op</td>
+    <td>
+      <button class="btn btn-sm btn-secondary" onclick="openEditRate('${c.id}','${escHtml(c.name)}',${c.rate_storage||1.5},${c.rate_op||25})">Edit</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ===== ADD/EDIT CONTAINER =====
+function openAddContainer() {
+  document.getElementById('modal-container-title').textContent = 'Add Container';
+  document.getElementById('edit-container-id').value = '';
+  document.getElementById('f-container-no').value = '';
+  document.getElementById('f-client').value = '';
+  document.getElementById('f-op').value = 'unload';
+  document.getElementById('f-unload-date').value = today();
+  document.getElementById('f-sales-ref').value = '';
+  document.getElementById('f-remarks').value = '';
+  document.getElementById('gate-out-row').hidden = true;
+  openModal('modal-container');
+}
+
+function openEditContainer(id) {
+  const t = allTransactions.find(tx => tx.id === id);
+  if (!t) return;
+  document.getElementById('modal-container-title').textContent = 'Edit Container';
+  document.getElementById('edit-container-id').value = t.id;
+  document.getElementById('f-container-no').value = t.container_no;
+  document.getElementById('f-client').value = t.client_id || '';
+  document.getElementById('f-op').value = t.op;
+  document.getElementById('f-unload-date').value = t.unload_date || '';
+  document.getElementById('f-sales-ref').value = t.sales_ref || '';
+  document.getElementById('f-remarks').value = t.remarks || '';
+  document.getElementById('gate-out-row').hidden = false;
+  document.getElementById('f-load-date').value = t.load_date || '';
+  document.getElementById('f-loaded').value = t.loaded ? 'true' : 'false';
+  openModal('modal-container');
+}
+
+async function saveContainer() {
+  const id = document.getElementById('edit-container-id').value;
+  const container_no = document.getElementById('f-container-no').value.trim().toUpperCase();
+  const client_id = document.getElementById('f-client').value;
+  const op = document.getElementById('f-op').value;
+  const unload_date = document.getElementById('f-unload-date').value;
+  if (!container_no || !client_id || !unload_date) { toast('Fill in required fields', 'error'); return; }
+  const data = { container_no, client_id, op, unload_date, sales_ref: document.getElementById('f-sales-ref').value.trim() || null, remarks: document.getElementById('f-remarks').value.trim() || null };
+  if (id) {
+    data.load_date = document.getElementById('f-load-date').value || null;
+    data.loaded = document.getElementById('f-loaded').value === 'true';
+  }
+  if (id) {
+    const { error } = await supabase.from('transactions').update(data).eq('id', id);
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    const idx = allTransactions.findIndex(t => t.id === id);
+    if (idx >= 0) allTransactions[idx] = { ...allTransactions[idx], ...data };
+    toast('Container updated');
+  } else {
+    const { data: inserted, error } = await supabase.from('transactions').insert([data]).select().single();
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    allTransactions.unshift(inserted);
+    toast('Container added');
+  }
+  closeModal('modal-container');
+  renderCurrentTab();
+}
+
+// ===== GATE OUT =====
+function openGateOut(id, containerNo) {
+  document.getElementById('gate-out-id').value = id;
+  document.getElementById('gate-out-container-no').textContent = containerNo;
+  document.getElementById('gate-out-date').value = today();
+  openModal('modal-gate-out');
+}
+
+async function confirmGateOut() {
+  const id = document.getElementById('gate-out-id').value;
+  const load_date = document.getElementById('gate-out-date').value;
+  if (!load_date) { toast('Enter gate out date', 'error'); return; }
+  const { error } = await supabase.from('transactions').update({ loaded: true, load_date }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const tx = allTransactions.find(t => t.id === id);
+  if (tx) { tx.loaded = true; tx.load_date = load_date; }
+  closeModal('modal-gate-out');
+  toast('Container gated out');
+  renderCurrentTab();
+}
+
+// ===== MARK PAID =====
+function openMarkPaid(id, invoiceNo) {
+  document.getElementById('paid-container-id').value = id;
+  document.getElementById('paid-invoice-no').textContent = invoiceNo;
+  document.getElementById('paid-date').value = today();
+  openModal('modal-paid');
+}
+
+async function confirmMarkPaid() {
+  const id = document.getElementById('paid-container-id').value;
+  const paid_date = document.getElementById('paid-date').value;
+  if (!paid_date) { toast('Enter payment date', 'error'); return; }
+  const { error } = await supabase.from('transactions').update({ paid_date }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const tx = allTransactions.find(t => t.id === id);
+  if (tx) tx.paid_date = paid_date;
+  closeModal('modal-paid');
+  toast('Payment recorded');
+  renderCurrentTab();
+}
+
+async function unpayTransaction(id) {
+  const { error } = await supabase.from('transactions').update({ paid_date: null }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const tx = allTransactions.find(t => t.id === id);
+  if (tx) tx.paid_date = null;
+  toast('Payment reversed');
+  renderPayments();
+}
+
+// ===== DELETE =====
+async function deleteTransaction(id) {
+  if (!confirm('Delete this container record?')) return;
+  const { error } = await supabase.from('transactions').update({ deleted: true }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  allTransactions = allTransactions.filter(t => t.id !== id);
+  toast('Container deleted');
+  renderCurrentTab();
+}
+
+// ===== ADD/EDIT CLIENT =====
+function openAddClient() {
+  document.getElementById('modal-client-title').textContent = 'Add Client';
+  document.getElementById('edit-client-id').value = '';
+  document.getElementById('f-client-name').value = '';
+  document.getElementById('f-client-contact').value = '';
+  document.getElementById('f-client-email').value = '';
+  document.getElementById('f-rate-storage').value = '1.5';
+  document.getElementById('f-rate-op').value = '25';
+  openModal('modal-client');
+}
+
+function openEditClient(id) {
+  const c = allClients.find(c => c.id === id);
+  if (!c) return;
+  document.getElementById('modal-client-title').textContent = 'Edit Client';
+  document.getElementById('edit-client-id').value = c.id;
+  document.getElementById('f-client-name').value = c.name;
+  document.getElementById('f-client-contact').value = c.contact || '';
+  document.getElementById('f-client-email').value = c.email || '';
+  document.getElementById('f-rate-storage').value = c.rate_storage || 1.5;
+  document.getElementById('f-rate-op').value = c.rate_op || 25;
+  openModal('modal-client');
+}
+
+async function saveClient() {
+  const id = document.getElementById('edit-client-id').value;
+  const name = document.getElementById('f-client-name').value.trim();
+  if (!name) { toast('Enter client name', 'error'); return; }
+  const data = {
+    name,
+    contact: document.getElementById('f-client-contact').value.trim() || null,
+    email: document.getElementById('f-client-email').value.trim() || null,
+    rate_storage: parseFloat(document.getElementById('f-rate-storage').value) || 1.5,
+    rate_op: parseFloat(document.getElementById('f-rate-op').value) || 25
+  };
+  if (id) {
+    const { error } = await supabase.from('clients').update(data).eq('id', id);
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    const idx = allClients.findIndex(c => c.id === id);
+    if (idx >= 0) allClients[idx] = { ...allClients[idx], ...data };
+    toast('Client updated');
+  } else {
+    const { data: inserted, error } = await supabase.from('clients').insert([data]).select().single();
+    if (error) { toast('Error: ' + error.message, 'error'); return; }
+    allClients.push(inserted);
+    allClients.sort((a,b) => a.name.localeCompare(b.name));
+    toast('Client added');
+  }
+  closeModal('modal-client');
+  populateClientFilters();
+  renderCurrentTab();
+}
+
+async function deleteClient(id) {
+  if (!confirm('Delete this client? Their containers will remain but unlinked.')) return;
+  const { error } = await supabase.from('clients').update({ deleted: true }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  allClients = allClients.filter(c => c.id !== id);
+  toast('Client deleted');
+  populateClientFilters();
+  renderCurrentTab();
+}
+
+// ===== CREATE CLIENT LOGIN =====
+function openCreateClientLogin(clientId, clientName) {
+  document.getElementById('cl-client-id').value = clientId;
+  document.getElementById('cl-client-name').textContent = clientName;
+  document.getElementById('cl-email').value = '';
+  document.getElementById('cl-password').value = '';
+  document.getElementById('cl-error').hidden = true;
+  openModal('modal-client-login');
+}
+
+async function createClientLogin() {
+  const clientId = document.getElementById('cl-client-id').value;
+  const email = document.getElementById('cl-email').value.trim();
+  const password = document.getElementById('cl-password').value;
+  const errEl = document.getElementById('cl-error');
+  const btn = document.getElementById('cl-save-btn');
+  errEl.hidden = true;
+  if (!email || !password) { errEl.textContent = 'Enter email and password.'; errEl.hidden = false; return; }
+  if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.hidden = false; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Creating…';
+  try {
+    // Try to sign up — this will work with anon key for user registration
+    const { data, error } = await supabase.auth.admin ?
+      supabase.auth.admin.createUser({ email, password, email_confirm: true }) :
+      supabase.auth.signUp({ email, password });
+    if (error) { errEl.textContent = error.message; errEl.hidden = false; return; }
+    const userId = data.user?.id;
+    if (!userId) { errEl.textContent = 'User created but ID not returned. Please link manually.'; errEl.hidden = false; return; }
+    // Insert into client_users
+    const { error: linkError } = await supabase.from('client_users').insert([{ user_id: userId, client_id: clientId }]);
+    if (linkError) { errEl.textContent = 'User created but link failed: ' + linkError.message + '. Please run: INSERT INTO client_users (user_id, client_id) VALUES (\'' + userId + '\', \'' + clientId + '\');'; errEl.hidden = false; return; }
+    closeModal('modal-client-login');
+    toast('Client login created successfully');
+  } catch(e) {
+    errEl.textContent = 'Error creating login. Use Supabase dashboard to create user manually.';
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Create Login';
+  }
+}
+
+// ===== EDIT RATE =====
+function openEditRate(id, name, rateStorage, rateOp) {
+  document.getElementById('rate-client-id').value = id;
+  document.getElementById('rate-client-name').textContent = name;
+  document.getElementById('f-edit-rate-storage').value = rateStorage;
+  document.getElementById('f-edit-rate-op').value = rateOp;
+  openModal('modal-rate');
+}
+
+async function saveRate() {
+  const id = document.getElementById('rate-client-id').value;
+  const rate_storage = parseFloat(document.getElementById('f-edit-rate-storage').value);
+  const rate_op = parseFloat(document.getElementById('f-edit-rate-op').value);
+  const { error } = await supabase.from('clients').update({ rate_storage, rate_op }).eq('id', id);
+  if (error) { toast('Error: ' + error.message, 'error'); return; }
+  const c = allClients.find(c => c.id === id);
+  if (c) { c.rate_storage = rate_storage; c.rate_op = rate_op; }
+  closeModal('modal-rate');
+  toast('Rates updated');
+  renderCurrentTab();
+}
+
+// ===== BULK UPLOAD =====
+function openBulkUpload() { openModal('modal-bulk'); }
+
+const dropzone = document.getElementById('bulk-dropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processBulkFile(file);
+});
+
+function handleBulkFile(input) { if (input.files[0]) processBulkFile(input.files[0]); }
+
+async function processBulkFile(file) {
+  if (!window.XLSX) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+    s.onload = () => processBulkFile(file);
+    document.head.appendChild(s);
+    return;
+  }
+  const ab = await file.arrayBuffer();
+  const wb = XLSX.read(ab);
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  bulkData = [];
+  const errors = [];
+  raw.forEach((row, i) => {
+    const no = (row['Container No'] || row['container_no'] || row['Container Number'] || '').toString().trim().toUpperCase();
+    const clientNameRaw = (row['Client Name'] || row['client_name'] || row['Client'] || '').toString().trim();
+    const op = (row['Op Type'] || row['op'] || row['Operation'] || 'unload').toString().toLowerCase().trim();
+    const dateRaw = (row['Gate In Date'] || row['unload_date'] || row['Date'] || '').toString().trim();
+    const salesRef = (row['Sales Ref'] || row['sales_ref'] || '').toString().trim();
+    const remarks = (row['Remarks'] || row['remarks'] || '').toString().trim();
+    if (!no) { errors.push(`Row ${i+2}: Missing container number`); return; }
+    if (!clientNameRaw) { errors.push(`Row ${i+2}: Missing client name`); return; }
+    const client = allClients.find(c => c.name.toLowerCase() === clientNameRaw.toLowerCase());
+    if (!client) { errors.push(`Row ${i+2}: Client "${clientNameRaw}" not found`); return; }
+    let unload_date = dateRaw;
+    if (!isNaN(Number(dateRaw)) && dateRaw !== '') {
+      // Excel serial date
+      const d = new Date((Number(dateRaw) - 25569) * 86400000);
+      unload_date = d.toISOString().split('T')[0];
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(unload_date)) { errors.push(`Row ${i+2}: Invalid date "${dateRaw}"`); return; }
+    if (!['unload','cross'].includes(op)) { errors.push(`Row ${i+2}: Op must be "unload" or "cross"`); return; }
+    bulkData.push({ container_no: no, client_id: client.id, client_name: client.name, op, unload_date, sales_ref: salesRef || null, remarks: remarks || null });
+  });
+
+  // Preview
+  const previewEl = document.getElementById('bulk-preview');
+  previewEl.hidden = false;
+  document.getElementById('bulk-row-count').textContent = bulkData.length;
+  document.getElementById('bulk-import-btn').disabled = bulkData.length === 0;
+  const head = document.getElementById('bulk-preview-head');
+  head.innerHTML = '<th>Container</th><th>Client</th><th>Op</th><th>Date</th><th>Sales Ref</th>';
+  const tbody = document.getElementById('bulk-preview-body');
+  tbody.innerHTML = bulkData.slice(0, 20).map(r => `<tr>
+    <td class="mono">${escHtml(r.container_no)}</td>
+    <td>${escHtml(r.client_name)}</td>
+    <td>${r.op}</td>
+    <td>${r.unload_date}</td>
+    <td>${escHtml(r.sales_ref || '')}</td>
+  </tr>`).join('');
+  if (errors.length) document.getElementById('bulk-errors').innerHTML = errors.join('<br>');
+  else document.getElementById('bulk-errors').innerHTML = '';
+}
+
+async function confirmBulkImport() {
+  if (!bulkData.length) return;
+  const toInsert = bulkData.map(({ client_name, ...rest }) => rest);
+  const { error } = await supabase.from('transactions').insert(toInsert);
+  if (error) { toast('Import error: ' + error.message, 'error'); return; }
+  toast(`${bulkData.length} containers imported`);
+  closeModal('modal-bulk');
+  await loadData();
+}
+
+// ===== EXPORT EXCEL =====
+async function exportExcel(view) {
+  if (!window.XLSX) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
+    s.onload = () => exportExcel(view);
+    document.head.appendChild(s);
+    return;
+  }
+  let rows = [];
+  let filename = 'export.xlsx';
+  if (view === 'in-yard') {
+    rows = getInYard().map(t => ({ 'Container No': t.container_no, 'Client': clientName(t.client_id), 'Gate In': t.unload_date, 'Days': daysBetween(t.unload_date), 'Op': t.op, 'Sales Ref': t.sales_ref, 'Remarks': t.remarks, 'Storage Cost (RO)': calcStorage(t).toFixed(3) }));
+    filename = 'in_yard.xlsx';
+  } else if (view === 'pending-invoice') {
+    rows = getPending().map(t => ({ 'Container No': t.container_no, 'Client': clientName(t.client_id), 'Gate In': t.unload_date, 'Gate Out': t.load_date, 'Days': daysBetween(t.unload_date, t.load_date), 'Op': t.op, 'Storage (RO)': calcStorage(t).toFixed(3), 'Op Cost (RO)': calcOp(t).toFixed(3), 'Total (RO)': calcTotal(t).toFixed(3) }));
+    filename = 'pending_invoice.xlsx';
+  } else if (view === 'invoiced') {
+    rows = getInvoiced().map(t => ({ 'Invoice No': t.invoice_no, 'Container No': t.container_no, 'Client': clientName(t.client_id), 'Gate In': t.unload_date, 'Gate Out': t.load_date, 'Days': daysBetween(t.unload_date, t.load_date), 'Total (RO)': calcTotal(t).toFixed(3) }));
+    filename = 'invoiced.xlsx';
+  } else if (view === 'payments') {
+    rows = getPayments().map(t => ({ 'Invoice No': t.invoice_no, 'Container No': t.container_no, 'Client': clientName(t.client_id), 'Total (RO)': calcTotal(t).toFixed(3), 'Paid Date': t.paid_date }));
+    filename = 'payments.xlsx';
+  } else if (view === 'client-in-yard') {
+    rows = (window._clientIYData || []).map(t => ({ 'Container No': t.container_no, 'Gate In': t.unload_date, 'Days in Yard': daysBetween(t.unload_date), 'Op': t.op, 'Remarks': t.remarks }));
+    filename = 'my_containers_in_yard.xlsx';
+  } else if (view === 'client-completed') {
+    rows = (window._clientCompletedData || []).map(t => ({ 'Container No': t.container_no, 'Gate In': t.unload_date, 'Gate Out': t.load_date, 'Days': daysBetween(t.unload_date, t.load_date), 'Op': t.op, 'Remarks': t.remarks }));
+    filename = 'my_containers_completed.xlsx';
+  }
+  if (!rows.length) { toast('No data to export', 'info'); return; }
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  XLSX.writeFile(wb, filename);
+  toast('Excel file downloaded');
+}
+
+// ===== CLIENT PORTAL =====
+async function loadClientData(clientId) {
+  const { data: txs } = await supabase.from('transactions').select('*').eq('client_id', clientId).eq('deleted', false).order('unload_date', { ascending: false });
+  const allTxs = txs || [];
+  window._clientIYData = allTxs.filter(t => !t.loaded);
+  window._clientCompletedData = allTxs.filter(t => t.loaded);
+  renderClientPortal();
+}
+
+function switchClientTab(tab) {
+  document.querySelectorAll('.client-tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0 && tab === 'in-yard-client') || (i === 1 && tab === 'completed-client'));
+  });
+  document.getElementById('in-yard-client').hidden = tab !== 'in-yard-client';
+  document.getElementById('completed-client').hidden = tab !== 'completed-client';
+}
+
+function renderClientPortal() {
+  const iy = window._clientIYData || [];
+  const comp = window._clientCompletedData || [];
+
+  // Stats
+  document.getElementById('client-iy-stats').innerHTML = `
+    <div class="stat-card accent"><div class="stat-label">In Yard</div><div class="stat-value">${iy.length}</div><div class="stat-sub">containers</div></div>
+    <div class="stat-card"><div class="stat-label">Total Days</div><div class="stat-value">${iy.reduce((s,t)=>s+daysBetween(t.unload_date),0)}</div><div class="stat-sub">accruing</div></div>
+  `;
+
+  // In yard
+  const tbody_iy = document.getElementById('tbody-client-iy');
+  if (!iy.length) {
+    tbody_iy.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-state-icon">📦</div><h3>No containers in yard</h3></div></td></tr>`;
+  } else {
+    tbody_iy.innerHTML = iy.map(t => {
+      const days = daysBetween(t.unload_date);
+      return `<tr>
+        <td><span class="mono" style="font-weight:500;">${escHtml(t.container_no)}</span></td>
+        <td>${fmtDate(t.unload_date)}</td>
+        <td><span class="tag ${days > 30 ? 'tag-red' : days > 14 ? 'tag-orange' : 'tag-gray'}" style="font-variant-numeric:tabular-nums;">${days}d</span></td>
+        <td><span class="tag ${t.op==='cross'?'tag-blue':'tag-green'}">${t.op==='cross'?'Cross-load':'Unload'}</span></td>
+        <td style="color:var(--fg-3);">${escHtml(t.remarks || '—')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Completed
+  const tbody_comp = document.getElementById('tbody-client-completed');
+  if (!comp.length) {
+    tbody_comp.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-state-icon">✅</div><h3>No completed containers yet</h3></div></td></tr>`;
+  } else {
+    tbody_comp.innerHTML = comp.map(t => `<tr>
+      <td><span class="mono" style="font-weight:500;">${escHtml(t.container_no)}</span></td>
+      <td>${fmtDate(t.unload_date)}</td>
+      <td>${fmtDate(t.load_date)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${daysBetween(t.unload_date, t.load_date)}d</td>
+      <td><span class="tag ${t.op==='cross'?'tag-blue':'tag-green'}">${t.op==='cross'?'Cross-load':'Unload'}</span></td>
+      <td style="color:var(--fg-3);">${escHtml(t.remarks || '—')}</td>
+    </tr>`).join('');
+  }
+}
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay:not([hidden])').forEach(m => m.hidden = true);
+  }
+});
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.hidden = true;
+  });
+});
+</script>
+</body>
+</html>
