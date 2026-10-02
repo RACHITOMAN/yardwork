@@ -81,6 +81,15 @@ tbody tr:nth-child(even){background:#ebebeb}
 .login-title{font-size:20px;font-weight:600;margin-bottom:.25rem;text-align:center}
 .login-sub{font-size:13px;color:var(--text2);margin-bottom:1.5rem;text-align:center}
 @media(max-width:600px){.stats-grid{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}.topbar{padding:0 1rem}.container{padding:1rem .5rem}}
+.import-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:var(--radius);font-size:12px;font-weight:600}
+.import-pill-new{background:#EAF3DE;color:#27500A}
+.import-pill-update{background:#E6F1FB;color:#0C447C}
+.import-pill-skip{background:#f3f4f6;color:#6b7280}
+.import-pill-warn{background:#fef9c3;color:#a16207}
+.import-row-new td{background:#f0fdf4}
+.import-row-update td{background:#eff6ff}
+.import-row-skip td{color:#9ca3af}
+.import-row-mismatch td{background:#fefce8}
 </style>
 </head>
 <body>
@@ -117,6 +126,7 @@ tbody tr:nth-child(even){background:#ebebeb}
     <button class="btn btn-client" onclick="openClientModal(null)">+ Add Client</button>
     <button class="btn btn-primary" onclick="openAddModal()">+ New Entry</button>
     <button class="btn btn-bulk" onclick="openBulkModal()">⊞ Bulk Entry</button>
+    <button class="btn" style="background:#7c3aed;color:#fff;border:none" onclick="openImportModal()">↑ Import Excel</button>
     <button class="btn" onclick="doLogout()">Sign Out</button>
   </div>
 </div>
@@ -264,6 +274,41 @@ tbody tr:nth-child(even){background:#ebebeb}
     <div class="modal-btns">
       <button class="btn" onclick="closeModal('modal-bulk-load')">Cancel</button>
       <button class="btn btn-primary" onclick="saveBulkLoad()">Save all</button>
+    </div>
+  </div>
+</div>
+
+<!-- Import Excel Modal -->
+<div id="modal-import" class="modal-overlay">
+  <div class="modal" style="width:720px;max-width:97vw">
+    <div class="modal-title">Import from Yard Excel</div>
+    <div id="import-step-pick" style="">
+      <div class="info-box" style="margin-bottom:12px">
+        Upload your daily yard Excel (<strong>Sheet6</strong> / first sheet). Rows are matched by container number against existing records. New unloadings are added; existing containers get their gate-out date filled in if missing.
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <label>Choose Excel file (.xlsx)</label>
+        <input type="file" id="import-file-input" accept=".xlsx,.xls" style="padding:6px 0">
+      </div>
+      <div class="modal-btns">
+        <button class="btn" onclick="closeModal('modal-import')">Cancel</button>
+        <button class="btn btn-primary" onclick="parseImportFile()">Parse File →</button>
+      </div>
+    </div>
+    <div id="import-step-preview" style="display:none">
+      <div id="import-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="import-mismatch-section" style="display:none;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:6px;color:#a16207">⚠ Container number mismatches — review before importing</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:6px">These containers from the Excel are already in the system under a similar but different number. Choose the correct match or leave as "Import as new".</div>
+        <div id="import-mismatch-rows" style="max-height:180px;overflow-y:auto"></div>
+      </div>
+      <div style="font-weight:600;margin-bottom:6px">Preview</div>
+      <div id="import-preview-table" style="max-height:320px;overflow-y:auto;font-size:12px"></div>
+      <div class="modal-btns" style="margin-top:12px">
+        <button class="btn" onclick="closeModal('modal-import')">Cancel</button>
+        <button class="btn" onclick="showImportPick()">← Back</button>
+        <button class="btn btn-primary" id="import-commit-btn" onclick="commitImport()">Import All</button>
+      </div>
     </div>
   </div>
 </div>
@@ -735,6 +780,320 @@ function copyClientLink(clientId){
   navigator.clipboard.writeText(url).catch(()=>{const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta)});
   alert('Client portal link copied!\n\n'+url+'\n\nSend this to '+(c?c.name:clientId));
 }
+
+// ─── Daily Excel Import ───────────────────────────────────────────────────────
+let importParsedRows=[];  // final rows ready to commit
+let importMismatchMap={}; // containerNo -> chosen resolution ('new' or existing containerNo)
+
+function openImportModal(){
+  showImportPick();
+  document.getElementById('import-file-input').value='';
+  document.getElementById('modal-import').classList.add('open');
+}
+
+function showImportPick(){
+  document.getElementById('import-step-pick').style.display='';
+  document.getElementById('import-step-preview').style.display='none';
+}
+
+// Normalize container number: uppercase, strip spaces & dashes
+function normCnum(s){return String(s||'').toUpperCase().replace(/[\s\-]/g,'').trim()}
+
+// Parse Excel date: can be a serial number, a DD.MM.YYYY string, or a Date object
+function parseExcelDate(v){
+  if(!v)return null;
+  if(v instanceof Date){
+    if(isNaN(v.getTime()))return null;
+    return v.toISOString().slice(0,10);
+  }
+  const s=String(v).trim();
+  // DD.MM.YYYY or DD/MM/YYYY
+  const m=s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if(m)return`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+  // YYYY-MM-DD already
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  // Excel serial number
+  if(!isNaN(Number(v))){
+    const n=Number(v);
+    if(n>40000&&n<60000){
+      const d=new Date(Math.round((n-25569)*86400*1000));
+      return d.toISOString().slice(0,10);
+    }
+  }
+  return null;
+}
+
+// Map TYPE OF WORK column → op ('unload' | 'cross') + loaded flag
+function mapOpType(typeOfWork){
+  const t=String(typeOfWork||'').toUpperCase().trim();
+  if(t.includes('CROSS LOAD')||t.includes('CROSS STUFF'))return{op:'cross',loaded:true};
+  if(t.includes('OFFLOAD')||t.includes('STORAGE')||t.includes('EMPTY CONTAINER OFFLOAD'))return{op:'unload',loaded:false};
+  if(t.includes('LOAD')&&!t.includes('OFFLOAD')&&!t.includes('CROSS'))return{op:'unload',loaded:true}; // gate-out row
+  return null; // skip STORAGE-only rows or unknown
+}
+
+async function parseImportFile(){
+  const file=document.getElementById('import-file-input').files[0];
+  if(!file){alert('Please select an Excel file first.');return}
+  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=new Uint8Array(ev.target.result);
+      const wb=XLSX.read(data,{type:'array',cellDates:true});
+      // Use first sheet
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+      processImportRows(rawRows);
+    }catch(err){alert('Error reading Excel: '+err.message)}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processImportRows(rawRows){
+  // Find header row (first row where col 0 looks like SL NO or a number)
+  let dataRows=rawRows;
+  if(rawRows.length&&(String(rawRows[0][0]||'').toUpperCase().includes('SL')||String(rawRows[0][1]||'').toUpperCase().includes('DATE'))){
+    dataRows=rawRows.slice(1); // skip header
+  }
+
+  // Group rows: offloading rows paired with their loading rows by container number
+  // Strategy:
+  //   - OFFLOADING / STORAGE / EMPTY OFFLOADING → gate-in row (create or skip if exists)
+  //   - CROSS LOADING / CROSS STUFFING → cross-load (create)
+  //   - LOADING / EMPTY LOADING → gate-out row (update existing unloaded entry)
+  const gateInMap={};    // normCnum → {date, clientName, salesRef, rawCnum}
+  const gateOutMap={};   // normCnum → {date}
+  const crossRows=[];    // [{date, cnum, clientName, salesRef}]
+
+  for(const row of dataRows){
+    if(!row||row.every(v=>v===null||v===''))continue;
+    const rawCnum=String(row[2]||'').trim();
+    if(!rawCnum||rawCnum.toUpperCase()==='CONTAINER'||rawCnum.toUpperCase()==='DRUM')continue;
+    const cnum=normCnum(rawCnum);
+    if(!cnum)continue;
+    const date=parseExcelDate(row[1]);
+    const typeOfWork=String(row[3]||'');
+    const clientName=String(row[4]||'').trim();
+    const salesRef=String(row[5]||'').trim();
+    const mapped=mapOpType(typeOfWork);
+    if(!mapped)continue;
+    if(mapped.op==='cross'){
+      crossRows.push({date,cnum,rawCnum,clientName,salesRef});
+    }else if(!mapped.loaded){
+      // gate-in
+      if(!gateInMap[cnum])gateInMap[cnum]={date,clientName,salesRef,rawCnum};
+    }else{
+      // gate-out
+      if(!gateOutMap[cnum])gateOutMap[cnum]={date};
+    }
+  }
+
+  // Now decide action per container:
+  // 1. Gate-in rows: INSERT if not already in DB, else SKIP
+  // 2. Gate-out rows: UPDATE existing unloaded entry if found, else SKIP
+  // 3. Cross rows: INSERT always (no dup check — cross loads are ephemeral)
+
+  const actions=[]; // [{action:'new'|'update'|'skip'|'mismatch', ...}]
+  const existingActive=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded);
+
+  // Map client names from Excel to CLIENTS list
+  function findClientId(nameFromExcel){
+    if(!nameFromExcel)return null;
+    const n=nameFromExcel.trim().toUpperCase();
+    const exact=CLIENTS.find(c=>c.name.trim().toUpperCase()===n);
+    if(exact)return exact.id;
+    // fuzzy: try includes
+    const partial=CLIENTS.find(c=>c.name.trim().toUpperCase().includes(n)||n.includes(c.name.trim().toUpperCase()));
+    return partial?partial.id:null;
+  }
+
+  // Check if a container exists (with soft match too)
+  function findExistingByNorm(cnum){
+    return existingActive.find(e=>normCnum(e.containerNo)===cnum)||null;
+  }
+
+  // Process gate-in rows
+  for(const[cnum,info]of Object.entries(gateInMap)){
+    const existing=findExistingByNorm(cnum);
+    const hasGateOut=!!gateOutMap[cnum];
+    const clientId=findClientId(info.clientName);
+    if(existing){
+      // container already in yard — skip gate-in but handle gate-out
+      if(hasGateOut&&!existing.loadDate){
+        actions.push({action:'update',existingId:existing.id,loadDate:gateOutMap[cnum].date,cnum:existing.containerNo,clientName:info.clientName,info});
+      }else{
+        actions.push({action:'skip',reason:'already in yard',cnum:info.rawCnum,clientName:info.clientName,info});
+      }
+    }else{
+      // Check for near-match (possible typo) — same first 4 chars, similar digits
+      const prefix=cnum.slice(0,4);
+      const near=existingActive.find(e=>normCnum(e.containerNo).slice(0,4)===prefix&&normCnum(e.containerNo)!==cnum);
+      if(near){
+        actions.push({action:'mismatch',xlCnum:info.rawCnum,normXl:cnum,dbCnum:near.containerNo,date:info.date,clientId,clientName:info.clientName,salesRef:info.salesRef,loadDate:hasGateOut?gateOutMap[cnum].date:null,loaded:hasGateOut});
+      }else{
+        actions.push({action:'new',cnum,rawCnum:info.rawCnum,date:info.date,clientId,clientName:info.clientName,salesRef:info.salesRef,loadDate:hasGateOut?gateOutMap[cnum].date:null,loaded:hasGateOut});
+      }
+    }
+  }
+
+  // Process gate-out rows where there was no matching gate-in in this Excel
+  for(const[cnum,info]of Object.entries(gateOutMap)){
+    if(gateInMap[cnum])continue; // already handled above
+    const existing=findExistingByNorm(cnum);
+    if(existing&&!existing.loadDate){
+      actions.push({action:'update',existingId:existing.id,loadDate:info.date,cnum:existing.containerNo,clientName:clientName(existing.clientId)});
+    }else if(!existing){
+      actions.push({action:'skip',reason:'gate-out but not in yard',cnum,clientName:'–'});
+    }
+    // if existing but already has loadDate — skip
+  }
+
+  // Process cross rows
+  for(const cr of crossRows){
+    const clientId=findClientId(cr.clientName);
+    // Check if this exact cross-load already in DB (same container + date)
+    const dupCross=DB.find(e=>!e.deleted&&e.op==='cross'&&normCnum(e.containerNo)===cr.cnum&&e.unloadDate===cr.date);
+    if(dupCross){
+      actions.push({action:'skip',reason:'cross-load already exists',cnum:cr.rawCnum,clientName:cr.clientName});
+    }else{
+      actions.push({action:'new',op:'cross',cnum:cr.cnum,rawCnum:cr.rawCnum,date:cr.date,clientId,clientName:cr.clientName,salesRef:cr.salesRef,loaded:true,loadDate:cr.date});
+    }
+  }
+
+  // Store result and show preview
+  importParsedRows=actions;
+  importMismatchMap={};
+  // default mismatch resolution: import as new
+  actions.filter(a=>a.action==='mismatch').forEach(a=>importMismatchMap[a.normXl]='new');
+  renderImportPreview(actions);
+}
+
+function renderImportPreview(actions){
+  const newRows=actions.filter(a=>a.action==='new');
+  const updateRows=actions.filter(a=>a.action==='update');
+  const skipRows=actions.filter(a=>a.action==='skip');
+  const mismatchRows=actions.filter(a=>a.action==='mismatch');
+
+  // Summary pills
+  document.getElementById('import-summary').innerHTML=
+    `<span class="import-pill import-pill-new">✚ ${newRows.length} new</span>`+
+    `<span class="import-pill import-pill-update">↑ ${updateRows.length} updates</span>`+
+    `<span class="import-pill import-pill-skip">— ${skipRows.length} skipped</span>`+
+    (mismatchRows.length?`<span class="import-pill import-pill-warn">⚠ ${mismatchRows.length} mismatch(es)</span>`:'');
+
+  // Mismatch section
+  const mmsec=document.getElementById('import-mismatch-section');
+  if(mismatchRows.length){
+    mmsec.style.display='';
+    let html='<table style="width:100%;font-size:12px"><thead><tr><th>Excel container</th><th>Similar in DB</th><th>Resolution</th></tr></thead><tbody>';
+    mismatchRows.forEach(a=>{
+      html+=`<tr class="import-row-mismatch">
+        <td><strong>${esc(a.xlCnum)}</strong></td>
+        <td>${esc(a.dbCnum)}</td>
+        <td><select onchange="importMismatchMap['${esc(a.normXl)}']=this.value" style="font-size:12px;padding:3px;border:0.5px solid var(--border2);border-radius:4px;background:var(--bg);color:var(--text)">
+          <option value="new">Import as new container</option>
+          <option value="usedb">Use DB number (${esc(a.dbCnum)})</option>
+        </select></td>
+      </tr>`;
+    });
+    html+='</tbody></table>';
+    document.getElementById('import-mismatch-rows').innerHTML=html;
+  }else{
+    mmsec.style.display='none';
+  }
+
+  // Preview table
+  let html='<table><thead><tr><th>Action</th><th>Container</th><th>Type</th><th>Date</th><th>Client</th><th>Note</th></tr></thead><tbody>';
+  actions.forEach(a=>{
+    let actionLabel='',rowClass='',typeLabel='',note='';
+    if(a.action==='new'){
+      actionLabel='<span class="badge badge-in">New</span>';
+      rowClass='import-row-new';
+      typeLabel=a.op==='cross'?'Cross-load':'Unloading'+(a.loaded?' + Load':'');
+      note=a.clientId?'':`<span style="color:#b45309">Client not found: ${esc(a.clientName)}</span>`;
+    }else if(a.action==='update'){
+      actionLabel='<span class="badge badge-inv">Update</span>';
+      rowClass='import-row-update';
+      typeLabel='Gate out';
+      note='Load date: '+fmt(a.loadDate);
+    }else if(a.action==='skip'){
+      actionLabel='<span style="color:#9ca3af;font-size:12px">Skip</span>';
+      rowClass='import-row-skip';
+      typeLabel='–';
+      note=esc(a.reason||'');
+    }else if(a.action==='mismatch'){
+      actionLabel='<span class="badge badge-cross">Review</span>';
+      rowClass='import-row-mismatch';
+      typeLabel='Unloading';
+      note=`Similar to: ${esc(a.dbCnum)}`;
+    }
+    html+=`<tr class="${rowClass}"><td>${actionLabel}</td><td>${esc(a.rawCnum||a.cnum)}</td><td>${typeLabel}</td><td>${fmt(a.date||a.loadDate)}</td><td>${esc(a.clientName||'–')}</td><td style="color:var(--text2)">${note}</td></tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('import-preview-table').innerHTML=html;
+
+  // Update commit button label
+  const total=newRows.length+updateRows.length+mismatchRows.length;
+  document.getElementById('import-commit-btn').textContent=`Import (${total} changes)`;
+
+  document.getElementById('import-step-pick').style.display='none';
+  document.getElementById('import-step-preview').style.display='';
+}
+
+async function commitImport(){
+  const actions=importParsedRows;
+  if(!actions.length){closeModal('modal-import');return}
+  setSyncStatus('saving');
+  let inserted=0,updated=0,errors=0;
+
+  for(const a of actions){
+    if(a.action==='skip')continue;
+
+    if(a.action==='new'){
+      const isCross=a.op==='cross';
+      const cnum=normCnum(a.cnum);
+      const clientId=a.clientId||null;
+      const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false};
+      const{data,error}=await sb.from('transactions').insert(row).select().single();
+      if(error){errors++;continue}
+      DB.unshift(rowToEntry(data));inserted++;
+    }
+
+    else if(a.action==='update'){
+      const{error}=await sb.from('transactions').update({loaded:true,load_date:a.loadDate}).eq('id',a.existingId);
+      if(error){errors++;continue}
+      const e=DB.find(x=>x.id===a.existingId);if(e){e.loaded=true;e.loadDate=a.loadDate}
+      updated++;
+    }
+
+    else if(a.action==='mismatch'){
+      const resolution=importMismatchMap[a.normXl]||'new';
+      if(resolution==='usedb'){
+        // treat as gate-out update for existing DB record
+        const existing=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&normCnum(e.containerNo)===normCnum(a.dbCnum));
+        if(existing){
+          const{error}=await sb.from('transactions').update({loaded:a.loaded,load_date:a.loaded?a.loadDate||a.date:null}).eq('id',existing.id);
+          if(error){errors++;continue}
+          if(existing){existing.loaded=a.loaded;existing.loadDate=a.loaded?a.loadDate||a.date:null}
+          updated++;
+        }
+      }else{
+        // insert as brand new container
+        const clientId=a.clientId||null;
+        const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false};
+        const{data,error}=await sb.from('transactions').insert(row).select().single();
+        if(error){errors++;continue}
+        DB.unshift(rowToEntry(data));inserted++;
+      }
+    }
+  }
+
+  importParsedRows=[];importMismatchMap={};
+  closeModal('modal-import');setSyncStatus('saved');render();
+  alert(`Import complete!\n✚ Inserted: ${inserted}\n↑ Updated: ${updated}${errors?`\n⚠ Errors: ${errors}`:''}`);
+}
+// ─── End Daily Excel Import ───────────────────────────────────────────────────
 
 // Excel exports
 function ensureXLSX(){
