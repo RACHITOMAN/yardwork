@@ -363,7 +363,7 @@ function setSyncStatus(s){
 function rowToEntry(r){
   return{id:r.id,containerNo:r.container_no,op:r.op,unloadDate:r.unload_date,loaded:r.loaded,loadDate:r.load_date,clientId:r.client_id,salesRef:r.sales_ref,remarks:r.remarks,invoiceNo:r.invoice_no,invoiced:r.invoiced,paidDate:r.paid_date,deleted:r.deleted,createdAt:r.created_at};
 }
-function rowToClient(r){return{id:r.id,name:r.name,deleted:r.deleted||false}}
+function rowToClient(r){return{id:r.id,name:r.name,deleted:r.deleted||false,retired:r.retired||false}}
 
 async function loadData(){
   const[txRes,clRes]=await Promise.all([
@@ -407,7 +407,8 @@ async function startApp(user){
 }
 
 function populateClientDropdowns(){
-  const sorted=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
+  // Retired clients are excluded from entry dropdowns — no accidental new entries
+  const sorted=CLIENTS.filter(c=>!c.deleted&&!c.retired).sort((a,b)=>a.name.localeCompare(b.name));
   const baseOpt='<option value="">— Select client —</option>';
   ['f-client','bulk-client','edit-client'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
@@ -416,7 +417,11 @@ function populateClientDropdowns(){
     if(prev)el.value=prev;
   });
   const gf=document.getElementById('global-client-filter');
-  if(gf){gf.innerHTML='<option value="">All clients</option>'+sorted.map(c=>`<option value="${c.id}"${globalClientFilter===c.id?' selected':''}>${esc(c.name)}</option>`).join('');}
+  if(gf){
+    // Global filter shows ALL non-deleted clients (including retired) so you can view their history
+    const allForFilter=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
+    gf.innerHTML='<option value="">All clients</option>'+allForFilter.map(c=>`<option value="${c.id}"${globalClientFilter===c.id?' selected':''}>${esc(c.name)}${c.retired?' (retired)':''}</option>`).join('');
+  }
 }
 
 function applyClientFilter(){globalClientFilter=document.getElementById('global-client-filter').value;render()}
@@ -551,10 +556,33 @@ async function saveClient(){
 async function deleteClient(id){
   const c=clientById(id);if(!c)return;
   const hasTx=DB.filter(e=>!e.deleted&&e.clientId===id).length;
-  if(!confirm(`${c.name} has ${hasTx} transaction(s). Delete client?`))return;
+  if(!confirm(`${c.name} has ${hasTx} transaction(s). Permanently delete client?\n\nTip: Use "Retire" instead to stop new entries without losing history.`))return;
   const{error}=await sb.from('clients').update({deleted:true}).eq('id',id);
   if(error){alert('Error: '+error.message);return}
   c.deleted=true;populateClientDropdowns();render();
+}
+
+async function retireClient(id){
+  const c=clientById(id);if(!c)return;
+  const inYard=DB.filter(e=>!e.deleted&&e.clientId===id&&e.op==='unload'&&!e.loaded).length;
+  const pendingInv=DB.filter(e=>!e.deleted&&e.clientId===id&&!e.invoiced&&(e.loaded||e.op==='cross')).length;
+  let msg=`Retire ${c.name}?\n\nThis will:\n• Remove them from all "Add Entry" dropdowns\n• Prevent any new entries for this client\n• Keep all existing records intact`;
+  if(inYard)msg+=`\n\n⚠ ${inYard} container(s) still in yard for this client.`;
+  if(pendingInv)msg+=`\n⚠ ${pendingInv} transaction(s) pending invoice.`;
+  if(!confirm(msg))return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('clients').update({retired:true}).eq('id',id);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  c.retired=true;setSyncStatus('saved');populateClientDropdowns();render();
+}
+
+async function unretireClient(id){
+  const c=clientById(id);if(!c)return;
+  if(!confirm(`Re-activate ${c.name}?\n\nThey will appear in entry dropdowns again.`))return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('clients').update({retired:false}).eq('id',id);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  c.retired=false;setSyncStatus('saved');populateClientDropdowns();render();
 }
 
 function openInvModal(id){
@@ -825,12 +853,15 @@ function parseExcelDate(v){
 }
 
 // Map TYPE OF WORK column → op ('unload' | 'cross') + loaded flag
+// Handles both old format (OFFLOADING/LOADING) and new format (UNLOADING/LOADING)
 function mapOpType(typeOfWork){
   const t=String(typeOfWork||'').toUpperCase().trim();
   if(t.includes('CROSS LOAD')||t.includes('CROSS STUFF'))return{op:'cross',loaded:true};
-  if(t.includes('OFFLOAD')||t.includes('STORAGE')||t.includes('EMPTY CONTAINER OFFLOAD'))return{op:'unload',loaded:false};
-  if(t.includes('LOAD')&&!t.includes('OFFLOAD')&&!t.includes('CROSS'))return{op:'unload',loaded:true}; // gate-out row
-  return null; // skip STORAGE-only rows or unknown
+  // Gate-in: OFFLOADING, UNLOADING, EMPTY UNLOADING, STORAGE, EMPTY CONTAINER OFFLOAD
+  if(t.includes('UNLOAD')||t.includes('OFFLOAD')||t.includes('STORAGE'))return{op:'unload',loaded:false};
+  // Gate-out: LOADING (but not cross/offload/unload)
+  if(t.includes('LOAD')&&!t.includes('UNLOAD')&&!t.includes('OFFLOAD')&&!t.includes('CROSS'))return{op:'unload',loaded:true};
+  return null; // unknown — skip row
 }
 
 async function parseImportFile(){
@@ -853,10 +884,17 @@ async function parseImportFile(){
 }
 
 function processImportRows(rawRows){
-  // Find header row (first row where col 0 looks like SL NO or a number)
+  // Skip header row if first row contains label text instead of data
   let dataRows=rawRows;
-  if(rawRows.length&&(String(rawRows[0][0]||'').toUpperCase().includes('SL')||String(rawRows[0][1]||'').toUpperCase().includes('DATE'))){
-    dataRows=rawRows.slice(1); // skip header
+  if(rawRows.length){
+    const r0=rawRows[0];
+    const c0=String(r0[0]||'').toUpperCase().trim();
+    const c1=String(r0[1]||'').toUpperCase().trim();
+    const c2=String(r0[2]||'').toUpperCase().trim();
+    // Old format header: SL NO in col0, DATE in col1
+    // New format header: DATE in col0, CONTAINER in col1, OPERATION/TYPE in col2
+    const isHeader=c0.includes('SL')||c0==='DATE'||c1==='DATE'||c1==='CONTAINER'||c2.includes('OPERATION')||c2.includes('TYPE');
+    if(isHeader)dataRows=rawRows.slice(1);
   }
 
   // Group rows: offloading rows paired with their loading rows by container number
@@ -868,16 +906,30 @@ function processImportRows(rawRows){
   const gateOutMap={};   // normCnum → {date}
   const crossRows=[];    // [{date, cnum, clientName, salesRef}]
 
+  // Auto-detect column layout by inspecting first data row:
+  // OLD format: [SL, Date, Container, TypeOfWork, Client, SalesRef, ...]  → indices 1,2,3,4,5
+  // NEW format: [Date, Container, Operation, Client, Operator, JobNo, ...]→ indices 0,1,2,3,5
+  let colDate=1,colCnum=2,colOp=3,colClient=4,colRef=5;
+  if(dataRows.length){
+    const fr=dataRows[0];
+    // If col[0] looks like a date and col[1] looks like a container number → new format
+    const c0=String(fr[0]||'').trim();
+    const c1=String(fr[1]||'').trim();
+    const looksDate=/^\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4}$/.test(c0)||(!isNaN(Number(c0))&&Number(c0)>40000&&Number(c0)<100000);
+    const looksContainer=/^[A-Z]{4}\d{7}$/.test(c1.replace(/\s/g,'').toUpperCase());
+    if(looksDate||looksContainer){colDate=0;colCnum=1;colOp=2;colClient=3;colRef=5;}
+  }
+
   for(const row of dataRows){
     if(!row||row.every(v=>v===null||v===''))continue;
-    const rawCnum=String(row[2]||'').trim();
+    const rawCnum=String(row[colCnum]||'').trim();
     if(!rawCnum||rawCnum.toUpperCase()==='CONTAINER'||rawCnum.toUpperCase()==='DRUM')continue;
     const cnum=normCnum(rawCnum);
     if(!cnum)continue;
-    const date=parseExcelDate(row[1]);
-    const typeOfWork=String(row[3]||'');
-    const clientName=String(row[4]||'').trim();
-    const salesRef=String(row[5]||'').trim();
+    const date=parseExcelDate(row[colDate]);
+    const typeOfWork=String(row[colOp]||'');
+    const clientName=String(row[colClient]||'').trim();
+    const salesRef=String(row[colRef]||'').trim();
     const mapped=mapOpType(typeOfWork);
     if(!mapped)continue;
     if(mapped.op==='cross'){
@@ -1441,10 +1493,10 @@ function renderUnpaidTable(){
 }
 
 function renderClients(){
-  const active=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><div style="font-size:15px;font-weight:500">Clients (${active.length})</div><button class="btn btn-primary btn-sm" onclick="openClientModal(null)">+ Add Client</button></div>`;
-  if(!active.length)html+='<div class="empty">No clients yet.</div>';
-  else active.forEach((c,i)=>{
+  const active=CLIENTS.filter(c=>!c.deleted&&!c.retired).sort((a,b)=>a.name.localeCompare(b.name));
+  const retired=CLIENTS.filter(c=>!c.deleted&&c.retired).sort((a,b)=>a.name.localeCompare(b.name));
+
+  function clientRowHtml(c,i,isRetired){
     const ai=i%AV_BG.length;
     const txAll=DB.filter(e=>!e.deleted&&e.clientId===c.id);
     const inYard=txAll.filter(e=>e.op==='unload'&&!e.loaded).length;
@@ -1453,10 +1505,21 @@ function renderClients(){
     const unpaidAmt=txAll.filter(e=>e.invoiced&&!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
     const lastLoadedTx=txAll.filter(e=>e.loadDate).sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||''));
     const lastLoaded=lastLoadedTx.length?lastLoadedTx[0].loadDate:'';
-    html+=`<div class="client-row">
-      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
+    const retiredBadge=isRetired?`<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;margin-left:6px">Retired</span>`:'';
+    const actionBtns=isRetired
+      ?`<button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none" onclick="unretireClient('${c.id}')">↩ Re-activate</button>
+         <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
+         <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>`
+      :`<button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')">📊 In-Yard XLS</button>
+         <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
+         <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.id}')">🔗 Client Link</button>
+         <button class="btn btn-sm" onclick="openClientModal('${c.id}')">✏️</button>
+         <button class="btn btn-sm" style="background:#92400e;color:#fff;border:none" title="Retire this client — removes from dropdowns, keeps all history" onclick="retireClient('${c.id}')">🔒 Retire</button>
+         <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>`;
+    return`<div class="client-row">
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};${isRetired?'opacity:0.55':''}">${initials(c.name)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:500;font-size:14px">${esc(c.name)}</div>
+        <div style="font-weight:500;font-size:14px;${isRetired?'color:var(--text2)':''}">${esc(c.name)}${retiredBadge}</div>
         <div class="client-summary">
           <span style="color:#1D9E75">${inYard} in yard</span> &bull; ${txAll.length} total &bull;
           Last loaded: ${lastLoaded?fmt(lastLoaded):'–'} &bull; RO ${totalBilled.toFixed(2)} billed &bull;
@@ -1464,15 +1527,31 @@ function renderClients(){
           <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span>
         </div>
       </div>
-      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')">📊 In-Yard XLS</button>
-        <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
-        <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.id}')">🔗 Client Link</button>
-        <button class="btn btn-sm" onclick="openClientModal('${c.id}')">✏️</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>
+      <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">${actionBtns}</div>
+    </div>`;
+  }
+
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <div style="font-size:15px;font-weight:500">Active Clients (${active.length})</div>
+    <button class="btn btn-primary btn-sm" onclick="openClientModal(null)">+ Add Client</button>
+  </div>`;
+
+  if(!active.length)html+='<div class="empty">No active clients.</div>';
+  else active.forEach((c,i)=>{html+=clientRowHtml(c,i,false)});
+
+  if(retired.length){
+    html+=`<div style="margin-top:1.5rem">
+      <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.textContent.startsWith('▶')?'▼ Retired Clients (${retired.length})':'▶ Retired Clients (${retired.length})';"
+        style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);padding:4px 0;display:flex;align-items:center;gap:6px">
+        ▶ Retired Clients (${retired.length})
+      </button>
+      <div style="display:none;margin-top:8px;padding:12px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border)">
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">These clients are retired — they will not appear in any entry dropdowns. All their history is preserved.</div>
+        ${retired.map((c,i)=>clientRowHtml(c,i,true)).join('')}
       </div>
     </div>`;
-  });
+  }
+
   document.getElementById('tab-clients').innerHTML=html;
   if(window._detailClientId)renderClientDetail(window._detailClientId,window._detailTab||'inyard');
 }
