@@ -77,9 +77,12 @@ tbody tr:nth-child(even){background:#ebebeb}
 .cdp-tab.active{color:var(--text);border-bottom:2px solid var(--text);font-weight:500}
 .cdp-body{padding:1rem 1.25rem}
 #login-screen{display:flex;position:fixed;inset:0;background:var(--bg3);z-index:999;align-items:center;justify-content:center}
-.login-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem 2rem;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.12)}
+.login-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:2.5rem 2rem;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.12)}
 .login-title{font-size:20px;font-weight:600;margin-bottom:.25rem;text-align:center}
 .login-sub{font-size:13px;color:var(--text2);margin-bottom:1.5rem;text-align:center}
+.user-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px}
+.user-btn{padding:18px 10px;font-size:15px;font-weight:600;border-radius:var(--radius);border:1.5px solid var(--border2);background:var(--bg2);color:var(--text);cursor:pointer;transition:background .1s,border-color .1s;text-align:center}
+.user-btn:hover{background:#2563eb;color:#fff;border-color:#2563eb}
 @media(max-width:600px){.stats-grid{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}.topbar{padding:0 1rem}.container{padding:1rem .5rem}}
 .import-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:var(--radius);font-size:12px;font-weight:600}
 .import-pill-new{background:#EAF3DE;color:#27500A}
@@ -98,11 +101,13 @@ tbody tr:nth-child(even){background:#ebebeb}
   <div class="login-card">
     <div style="text-align:center;font-size:40px;margin-bottom:1rem">📦</div>
     <div class="login-title">Yard Container Tracker</div>
-    <div class="login-sub">Sign in to continue</div>
-    <div class="field" style="margin-bottom:10px"><label>Email</label><input id="login-email" type="email" placeholder="you@example.com" autocomplete="username"></div>
-    <div class="field" style="margin-bottom:16px"><label>Password</label><input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div id="login-error" style="display:none;background:#FCEBEB;color:#A32D2D;padding:8px 10px;border-radius:var(--radius);font-size:13px;margin-bottom:12px"></div>
-    <button class="btn btn-primary" style="width:100%;padding:10px" onclick="doLogin()">Sign In</button>
+    <div class="login-sub">Who are you?</div>
+    <div class="user-btns">
+      <button class="user-btn" onclick="selectUser('RACHIT')">👤 RACHIT</button>
+      <button class="user-btn" onclick="selectUser('YARD')">👤 YARD</button>
+      <button class="user-btn" onclick="selectUser('VISHNU')">👤 VISHNU</button>
+      <button class="user-btn" onclick="selectUser('MANISHA')">👤 MANISHA</button>
+    </div>
   </div>
 </div>
 <!-- Loading -->
@@ -127,7 +132,8 @@ tbody tr:nth-child(even){background:#ebebeb}
     <button class="btn btn-primary" onclick="openAddModal()">+ New Entry</button>
     <button class="btn btn-bulk" onclick="openBulkModal()">⊞ Bulk Entry</button>
     <button class="btn" style="background:#7c3aed;color:#fff;border:none" onclick="openImportModal()">↑ Import Excel</button>
-    <button class="btn" onclick="doLogout()">Sign Out</button>
+    <span id="active-user-label" style="font-size:12px;font-weight:600;color:var(--text2);padding:0 4px"></span>
+    <button class="btn" onclick="switchUser()" title="Switch user">⇄ Switch</button>
   </div>
 </div>
 <div class="container">
@@ -361,9 +367,9 @@ function setSyncStatus(s){
 }
 
 function rowToEntry(r){
-  return{id:r.id,containerNo:r.container_no,op:r.op,unloadDate:r.unload_date,loaded:r.loaded,loadDate:r.load_date,clientId:r.client_id,salesRef:r.sales_ref,remarks:r.remarks,invoiceNo:r.invoice_no,invoiced:r.invoiced,paidDate:r.paid_date,deleted:r.deleted,createdAt:r.created_at};
+  return{id:r.id,containerNo:r.container_no,op:r.op,unloadDate:r.unload_date,loaded:r.loaded,loadDate:r.load_date,clientId:r.client_id,salesRef:r.sales_ref,remarks:r.remarks,invoiceNo:r.invoice_no,invoiced:r.invoiced,paidDate:r.paid_date,deleted:r.deleted,createdAt:r.created_at,createdBy:r.created_by||''};
 }
-function rowToClient(r){return{id:r.id,name:r.name,deleted:r.deleted||false,retired:r.retired||false}}
+function rowToClient(r){return{id:r.id,name:r.name,deleted:r.deleted||false}}
 
 async function loadData(){
   const[txRes,clRes]=await Promise.all([
@@ -382,33 +388,42 @@ async function syncNow(){
   catch(e){setSyncStatus('error');alert('Sync error: '+e.message)}
 }
 
-async function doLogin(){
-  const email=document.getElementById('login-email').value.trim();
-  const password=document.getElementById('login-password').value;
-  const errEl=document.getElementById('login-error');errEl.style.display='none';
-  if(!email||!password){errEl.textContent='Enter email and password.';errEl.style.display='block';return}
-  const{data,error}=await sb.auth.signInWithPassword({email,password});
-  if(error){errEl.textContent=error.message||'Invalid email or password.';errEl.style.display='block';return}
-  await startApp(data.user);
+// ── User session (name only, stored in localStorage) ──────────────────────
+const USERS=['RACHIT','YARD','VISHNU','MANISHA'];
+let activeUser=localStorage.getItem('yardActiveUser')||null;
+
+function selectUser(name){
+  activeUser=name;
+  localStorage.setItem('yardActiveUser',name);
+  startApp();
 }
 
-async function doLogout(){await sb.auth.signOut();location.reload()}
+function switchUser(){
+  activeUser=null;
+  localStorage.removeItem('yardActiveUser');
+  document.getElementById('app').style.display='none';
+  document.getElementById('login-screen').style.display='flex';
+}
 
-async function startApp(user){
+async function startApp(){
   document.getElementById('login-screen').style.display='none';
   document.getElementById('loading-screen').style.display='flex';
   await loadData();
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('today-label').textContent='Today: '+fmt(today());
+  document.getElementById('active-user-label').textContent='👤 '+activeUser;
   populateClientDropdowns();
   applyUrlClientFilter();
   render();
+  // Auto-refresh every 60 seconds
+  setInterval(async()=>{
+    try{await loadData();populateClientDropdowns();render();setSyncStatus('saved')}catch(e){}
+  },60000);
 }
 
 function populateClientDropdowns(){
-  // Retired clients are excluded from entry dropdowns — no accidental new entries
-  const sorted=CLIENTS.filter(c=>!c.deleted&&!c.retired).sort((a,b)=>a.name.localeCompare(b.name));
+  const sorted=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
   const baseOpt='<option value="">— Select client —</option>';
   ['f-client','bulk-client','edit-client'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
@@ -418,9 +433,9 @@ function populateClientDropdowns(){
   });
   const gf=document.getElementById('global-client-filter');
   if(gf){
-    // Global filter shows ALL non-deleted clients (including retired) so you can view their history
+    // Global filter shows ALL non-deleted clients
     const allForFilter=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
-    gf.innerHTML='<option value="">All clients</option>'+allForFilter.map(c=>`<option value="${c.id}"${globalClientFilter===c.id?' selected':''}>${esc(c.name)}${c.retired?' (retired)':''}</option>`).join('');
+    gf.innerHTML='<option value="">All clients</option>'+allForFilter.map(c=>`<option value="${c.id}"${globalClientFilter===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
   }
 }
 
@@ -472,7 +487,7 @@ async function saveEntry(){
     if(dup){alert('Container '+cnum+' is already in the yard.');return}
   }
   setSyncStatus('saving');
-  const{data,error}=await sb.from('transactions').insert({container_no:cnum,op:currentOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks,invoice_no:null,invoiced:false,paid_date:null,deleted:false}).select().single();
+  const{data,error}=await sb.from('transactions').insert({container_no:cnum,op:currentOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks,invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''}).select().single();
   if(error){setSyncStatus('error');alert('Save error: '+error.message);return}
   DB.unshift(rowToEntry(data));
   closeModal('modal-add');setSyncStatus('saved');render();
@@ -517,7 +532,7 @@ async function saveBulkEntries(){
     if(!isCross){const dup=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&e.containerNo===cnum);if(dup){skippedExisting.push(cnum);continue}}
     const dateEl=document.getElementById(`bulk-row-date-${i}`);
     const date=dateEl?dateEl.value:document.getElementById('bulk-date').value;
-    toInsert.push({container_no:cnum,op:bulkOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false});
+    toInsert.push({container_no:cnum,op:bulkOp,unload_date:date,loaded:isCross,load_date:isCross?date:null,client_id:clientId,sales_ref:salesRef,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''});
   }
   if(toInsert.length){
     setSyncStatus('saving');
@@ -556,34 +571,12 @@ async function saveClient(){
 async function deleteClient(id){
   const c=clientById(id);if(!c)return;
   const hasTx=DB.filter(e=>!e.deleted&&e.clientId===id).length;
-  if(!confirm(`${c.name} has ${hasTx} transaction(s). Permanently delete client?\n\nTip: Use "Retire" instead to stop new entries without losing history.`))return;
+  if(!confirm(`${c.name} has ${hasTx} transaction(s). Permanently delete client?`))return;
   const{error}=await sb.from('clients').update({deleted:true}).eq('id',id);
   if(error){alert('Error: '+error.message);return}
   c.deleted=true;populateClientDropdowns();render();
 }
 
-async function retireClient(id){
-  const c=clientById(id);if(!c)return;
-  const inYard=DB.filter(e=>!e.deleted&&e.clientId===id&&e.op==='unload'&&!e.loaded).length;
-  const pendingInv=DB.filter(e=>!e.deleted&&e.clientId===id&&!e.invoiced&&(e.loaded||e.op==='cross')).length;
-  let msg=`Retire ${c.name}?\n\nThis will:\n• Remove them from all "Add Entry" dropdowns\n• Prevent any new entries for this client\n• Keep all existing records intact`;
-  if(inYard)msg+=`\n\n⚠ ${inYard} container(s) still in yard for this client.`;
-  if(pendingInv)msg+=`\n⚠ ${pendingInv} transaction(s) pending invoice.`;
-  if(!confirm(msg))return;
-  setSyncStatus('saving');
-  const{error}=await sb.from('clients').update({retired:true}).eq('id',id);
-  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
-  c.retired=true;setSyncStatus('saved');populateClientDropdowns();render();
-}
-
-async function unretireClient(id){
-  const c=clientById(id);if(!c)return;
-  if(!confirm(`Re-activate ${c.name}?\n\nThey will appear in entry dropdowns again.`))return;
-  setSyncStatus('saving');
-  const{error}=await sb.from('clients').update({retired:false}).eq('id',id);
-  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
-  c.retired=false;setSyncStatus('saved');populateClientDropdowns();render();
-}
 
 function openInvModal(id){
   pendingInvEntry=DB.find(e=>e.id===id);if(!pendingInvEntry)return;
@@ -1105,7 +1098,7 @@ async function importAddClient(name){
     return;
   }
   setSyncStatus('saving');
-  const{data,error}=await sb.from('clients').insert({name:trimmed,deleted:false,retired:false}).select().single();
+  const{data,error}=await sb.from('clients').insert({name:trimmed,deleted:false}).select().single();
   if(error){setSyncStatus('error');alert('Could not add client: '+error.message);return}
   CLIENTS.push(rowToClient(data));
   populateClientDropdowns();
@@ -1127,7 +1120,7 @@ async function commitImport(){
       const isCross=a.op==='cross';
       const cnum=normCnum(a.cnum);
       const clientId=a.clientId||null;
-      const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false};
+      const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
       const{data,error}=await sb.from('transactions').insert(row).select().single();
       if(error){errors++;continue}
       DB.unshift(rowToEntry(data));inserted++;
@@ -1154,7 +1147,7 @@ async function commitImport(){
       }else{
         // insert as brand new container
         const clientId=a.clientId||null;
-        const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false};
+        const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
         const{data,error}=await sb.from('transactions').insert(row).select().single();
         if(error){errors++;continue}
         DB.unshift(rowToEntry(data));inserted++;
@@ -1285,6 +1278,7 @@ function entryRow(e){
     <td>${fmt(e.loadDate)}</td>
     <td style="text-align:center">${r.days}</td>
     <td>${opBadge}</td>
+    <td>${e.createdBy?`<span style="font-size:11px;color:var(--text2)">${esc(e.createdBy)}</span>`:'–'}</td>
     <td>${invCell}</td>
     <td style="white-space:nowrap">
       <button class="btn btn-sm" onclick="openEditModal('${e.id}')" title="Edit">✏️</button>
@@ -1308,7 +1302,7 @@ function yardRow(e){
 
 function tableWrap(rows,tfoot){
   return`<div class="overflow-x"><table>
-    <thead><tr><th style="width:40px"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th>Gate Out</th><th style="text-align:center">Days</th><th>Status</th><th>Invoice</th><th></th></tr></thead>
+    <thead><tr><th style="width:40px"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th>Gate Out</th><th style="text-align:center">Days</th><th>Status</th><th>By</th><th>Invoice</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="9" class="empty">No records found.</td></tr>'}</tbody>${tfoot||''}
   </table></div>`;
 }
@@ -1493,10 +1487,9 @@ function renderUnpaidTable(){
 }
 
 function renderClients(){
-  const active=CLIENTS.filter(c=>!c.deleted&&!c.retired).sort((a,b)=>a.name.localeCompare(b.name));
-  const retired=CLIENTS.filter(c=>!c.deleted&&c.retired).sort((a,b)=>a.name.localeCompare(b.name));
+  const active=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
 
-  function clientRowHtml(c,i,isRetired){
+  function clientRowHtml(c,i){
     const ai=i%AV_BG.length;
     const txAll=DB.filter(e=>!e.deleted&&e.clientId===c.id);
     const inYard=txAll.filter(e=>e.op==='unload'&&!e.loaded).length;
@@ -1505,21 +1498,15 @@ function renderClients(){
     const unpaidAmt=txAll.filter(e=>e.invoiced&&!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
     const lastLoadedTx=txAll.filter(e=>e.loadDate).sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||''));
     const lastLoaded=lastLoadedTx.length?lastLoadedTx[0].loadDate:'';
-    const retiredBadge=isRetired?`<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#f3f4f6;color:#6b7280;margin-left:6px">Retired</span>`:'';
-    const actionBtns=isRetired
-      ?`<button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none" onclick="unretireClient('${c.id}')">↩ Re-activate</button>
-         <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
-         <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>`
-      :`<button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')">📊 In-Yard XLS</button>
+    const actionBtns=`<button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a" onclick="exportClientInYardExcel('${c.id}')">📊 In-Yard XLS</button>
          <button class="btn btn-sm btn-client" onclick="openClientDetail('${c.id}')">📋 Detail</button>
          <button class="btn btn-sm" style="background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="copyClientLink('${c.id}')">🔗 Client Link</button>
          <button class="btn btn-sm" onclick="openClientModal('${c.id}')">✏️</button>
-         <button class="btn btn-sm" style="background:#92400e;color:#fff;border:none" title="Retire this client — removes from dropdowns, keeps all history" onclick="retireClient('${c.id}')">🔒 Retire</button>
          <button class="btn btn-sm btn-danger" onclick="deleteClient('${c.id}')">🗑</button>`;
     return`<div class="client-row">
-      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};${isRetired?'opacity:0.55':''}">${initials(c.name)}</div>
+      <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]}">${initials(c.name)}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-weight:500;font-size:14px;${isRetired?'color:var(--text2)':''}">${esc(c.name)}${retiredBadge}</div>
+        <div style="font-weight:500;font-size:14px">${esc(c.name)}</div>
         <div class="client-summary">
           <span style="color:#1D9E75">${inYard} in yard</span> &bull; ${txAll.length} total &bull;
           Last loaded: ${lastLoaded?fmt(lastLoaded):'–'} &bull; RO ${totalBilled.toFixed(2)} billed &bull;
@@ -1532,25 +1519,12 @@ function renderClients(){
   }
 
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-    <div style="font-size:15px;font-weight:500">Active Clients (${active.length})</div>
+    <div style="font-size:15px;font-weight:500">Clients (${active.length})</div>
     <button class="btn btn-primary btn-sm" onclick="openClientModal(null)">+ Add Client</button>
   </div>`;
 
-  if(!active.length)html+='<div class="empty">No active clients.</div>';
-  else active.forEach((c,i)=>{html+=clientRowHtml(c,i,false)});
-
-  if(retired.length){
-    html+=`<div style="margin-top:1.5rem">
-      <button onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.textContent=this.textContent.startsWith('▶')?'▼ Retired Clients (${retired.length})':'▶ Retired Clients (${retired.length})';"
-        style="background:none;border:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);padding:4px 0;display:flex;align-items:center;gap:6px">
-        ▶ Retired Clients (${retired.length})
-      </button>
-      <div style="display:none;margin-top:8px;padding:12px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border)">
-        <div style="font-size:12px;color:var(--text2);margin-bottom:10px">These clients are retired — they will not appear in any entry dropdowns. All their history is preserved.</div>
-        ${retired.map((c,i)=>clientRowHtml(c,i,true)).join('')}
-      </div>
-    </div>`;
-  }
+  if(!active.length)html+='<div class="empty">No clients.</div>';
+  else active.forEach((c,i)=>{html+=clientRowHtml(c,i)});
 
   document.getElementById('tab-clients').innerHTML=html;
   if(window._detailClientId)renderClientDetail(window._detailClientId,window._detailTab||'inyard');
@@ -1674,8 +1648,8 @@ function render(){
 }
 
 (async function(){
-  const{data:{session}}=await sb.auth.getSession();
-  if(session)await startApp(session.user);
+  if(activeUser)await startApp();
+  // else login screen is already visible
 })();
 </script>
 </body>
