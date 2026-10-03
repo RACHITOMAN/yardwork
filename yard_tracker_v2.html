@@ -1064,7 +1064,7 @@ function renderImportPreview(actions){
       actionLabel='<span class="badge badge-in">New</span>';
       rowClass='import-row-new';
       typeLabel=a.op==='cross'?'Cross-load':'Unloading'+(a.loaded?' + Load':'');
-      note=a.clientId?'':`<span style="color:#b45309;margin-right:6px">Client not found: ${esc(a.clientName)}</span><button class="btn btn-sm btn-client" onclick="importAddClient(${JSON.stringify(a.clientName)})">+ Add Client</button>`;
+      note=a.clientId?'':`<span style="color:#b45309;margin-right:6px">Client not found: ${esc(a.clientName)}</span><button class="btn btn-sm btn-client" data-cname="${esc(a.clientName)}" onclick="importAddClient(this.dataset.cname)">+ Add Client</button>`;
     }else if(a.action==='update'){
       actionLabel='<span class="badge badge-inv">Update</span>';
       rowClass='import-row-update';
@@ -1079,7 +1079,7 @@ function renderImportPreview(actions){
       actionLabel='<span class="badge badge-cross">Review</span>';
       rowClass='import-row-mismatch';
       typeLabel='Unloading';
-      note=`Similar to: ${esc(a.dbCnum)}`+(a.clientId?'':` &nbsp;<button class="btn btn-sm btn-client" onclick="importAddClient(${JSON.stringify(a.clientName)})">+ Add Client</button>`);
+      note=`Similar to: ${esc(a.dbCnum)}`+(a.clientId?'':` &nbsp;<button class="btn btn-sm btn-client" data-cname="${esc(a.clientName)}" onclick="importAddClient(this.dataset.cname)">+ Add Client</button>`);
     }
     html+=`<tr class="${rowClass}"><td>${actionLabel}</td><td>${esc(a.rawCnum||a.cnum)}</td><td>${typeLabel}</td><td>${fmt(a.date||a.loadDate)}</td><td>${esc(a.clientName||'–')}</td><td style="color:var(--text2)">${note}</td></tr>`;
   });
@@ -1105,7 +1105,7 @@ async function importAddClient(name){
     return;
   }
   setSyncStatus('saving');
-  const{data,error}=await sb.from('clients').insert({name:trimmed,deleted:false}).select().single();
+  const{data,error}=await sb.from('clients').insert({name:trimmed,deleted:false,retired:false}).select().single();
   if(error){setSyncStatus('error');alert('Could not add client: '+error.message);return}
   CLIENTS.push(rowToClient(data));
   populateClientDropdowns();
