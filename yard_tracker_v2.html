@@ -1358,13 +1358,24 @@ async function exportPendingInvoiceSummary(){
 async function exportClientInYardExcel(cid){
   try{await ensureXLSX()}catch(e){alert(e.message);return}
   const c=clientById(cid);const label=c?c.name:'All';
+  const portal=isClientPortal();
   let data=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded);
   if(cid)data=data.filter(e=>e.clientId===cid);
   if(!data.length){alert('No containers in yard.');return}
   let tS=0,tT=0;
-  const rows=data.map(e=>{const r=calcTotal(e);tS+=r.storageCost;tT+=r.total;return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Days':r.days,'Storage Accrued (RO)':+r.storageCost.toFixed(2),'Op Charge (RO)':+r.opCost.toFixed(2),'Total Accrued (RO)':+r.total.toFixed(2),'Sales Ref':e.salesRef||'','Remarks':e.remarks||''}});
-  rows.push({});rows.push({'Container No':'TOTAL','Storage Accrued (RO)':+tS.toFixed(2),'Total Accrued (RO)':+tT.toFixed(2)});
-  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:25},{wch:14},{wch:8},{wch:20},{wch:16},{wch:20},{wch:14},{wch:20}];
+  const rows=data.map(e=>{
+    const r=calcTotal(e);tS+=r.storageCost;tT+=r.total;
+    if(portal){
+      return{'Container No':e.containerNo,'Gate In':fmtXl(e.unloadDate),'Days in Yard':r.days,'Remarks':e.remarks||''};
+    }
+    return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Days in Yard':r.days,'Storage Accrued (RO)':+r.storageCost.toFixed(2),'Op Charge (RO)':+r.opCost.toFixed(2),'Total Accrued (RO)':+r.total.toFixed(2),'Sales Ref':e.salesRef||'','Remarks':e.remarks||''};
+  });
+  if(!portal){
+    rows.push({});
+    rows.push({'Container No':'TOTAL','Storage Accrued (RO)':+tS.toFixed(2),'Total Accrued (RO)':+tT.toFixed(2)});
+  }
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=portal?[{wch:18},{wch:14},{wch:12},{wch:25}]:[{wch:18},{wch:25},{wch:14},{wch:12},{wch:20},{wch:16},{wch:20},{wch:14},{wch:20}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'In Yard');
   XLSX.writeFile(wb,`${label}_InYard_${today()}.xlsx`);
 }
@@ -1374,8 +1385,34 @@ async function exportClientCompletedExcel(cid){
   const c=clientById(cid);const label=c?c.name:'Client';
   const data=DB.filter(e=>!e.deleted&&e.clientId===cid&&((e.op==='unload'&&e.loaded)||e.op==='cross'));
   if(!data.length){alert('No completed containers.');return}
-  const rows=data.sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||'')).map(e=>({'Container No':e.containerNo,'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':calcTotal(e).days,'Type':e.op==='cross'?'Cross-load':'Unload+Load','Remarks':e.remarks||''}));
-  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:14},{wch:14},{wch:8},{wch:14},{wch:25}];
+  // Group by container number to club multiple moves
+  const groups={};
+  data.forEach(e=>{const k=e.containerNo;if(!groups[k])groups[k]=[];groups[k].push(e)});
+  const containerKeys=Object.keys(groups).sort((a,b)=>{
+    const aD=groups[a][0].unloadDate||groups[a][0].loadDate||'';
+    const bD=groups[b][0].unloadDate||groups[b][0].loadDate||'';
+    return bD.localeCompare(aD);
+  });
+  const rows=[];
+  containerKeys.forEach(cnum=>{
+    const moves=groups[cnum].sort((a,b)=>(a.unloadDate||a.loadDate||'').localeCompare(b.unloadDate||b.loadDate||''));
+    const multiMove=moves.length>1;
+    moves.forEach((e,idx)=>{
+      const isCross=e.op==='cross';
+      const moveLabel=multiMove?`Move ${idx+1}`:'';
+      const opLabel=isCross?'Cross-load':'';
+      const remarksArr=[moveLabel,opLabel,e.remarks||''].filter(Boolean);
+      rows.push({
+        'Container No':multiMove&&idx>0?'':cnum,
+        'Gate In':fmtXl(e.unloadDate),
+        'Gate Out':fmtXl(e.loadDate),
+        'Days':calcTotal(e).days,
+        'Remarks':remarksArr.join(' | ')
+      });
+    });
+    if(multiMove)rows.push({});
+  });
+  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:14},{wch:14},{wch:8},{wch:30}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Completed');
   XLSX.writeFile(wb,`${label}_Completed_${today()}.xlsx`);
 }
