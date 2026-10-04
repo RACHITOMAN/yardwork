@@ -55,6 +55,7 @@ tbody tr:nth-child(even){background:#ebebeb}
 .filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem;align-items:center}
 .filter-bar input,.filter-bar select{padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)}
 .empty{text-align:center;padding:2rem;color:var(--text2);font-size:13px}
+th[onclick]:hover{background:var(--bg3)!important;transition:background .15s}
 .op-row{display:flex;gap:8px;margin-bottom:10px}
 .op-btn{flex:1;padding:9px 4px;border:0.5px solid var(--border2);border-radius:var(--radius);cursor:pointer;text-align:center;font-size:12px;background:var(--bg);color:var(--text2)}
 .op-btn.sel-unload{border-color:#1D9E75;background:#E1F5EE;color:#085041;font-weight:500}
@@ -132,6 +133,7 @@ tbody tr:nth-child(even){background:#ebebeb}
     <button class="btn btn-primary" onclick="openAddModal()">+ New Entry</button>
     <button class="btn btn-bulk" onclick="openBulkModal()">⊞ Bulk Entry</button>
     <button class="btn" style="background:#7c3aed;color:#fff;border:none" onclick="openImportModal()">↑ Import Excel</button>
+    <button id="undo-import-btn" class="btn" style="display:none;background:#b45309;color:#fff;border:none" onclick="undoLastImport()">↩ Undo Import</button>
     <span id="active-user-label" style="font-size:12px;font-weight:600;color:var(--text2);padding:0 4px"></span>
     <button class="btn" onclick="switchUser()" title="Switch user">⇄ Switch</button>
   </div>
@@ -806,6 +808,7 @@ function copyClientLink(clientId){
 let importParsedRows=[];    // final rows ready to commit
 let importMismatchMap={};  // containerNo -> chosen resolution ('new' or existing containerNo)
 let importRawRows=[];      // kept so we can re-process after adding a client
+let lastImportUndo=null;   // {insertedIds:[...], updatedIds:[{id,prevLoaded,prevLoadDate}]}
 
 function openImportModal(){
   showImportPick();
@@ -890,14 +893,10 @@ function processImportRows(rawRows){
     if(isHeader)dataRows=rawRows.slice(1);
   }
 
-  // Group rows: offloading rows paired with their loading rows by container number
-  // Strategy:
-  //   - OFFLOADING / STORAGE / EMPTY OFFLOADING → gate-in row (create or skip if exists)
-  //   - CROSS LOADING / CROSS STUFFING → cross-load (create)
-  //   - LOADING / EMPTY LOADING → gate-out row (update existing unloaded entry)
-  const gateInMap={};    // normCnum → {date, clientName, salesRef, rawCnum}
-  const gateOutMap={};   // normCnum → {date}
-  const crossRows=[];    // [{date, cnum, clientName, salesRef}]
+  // Parse ALL rows in order, preserving multiple moves of the same container.
+  // A container offloaded → loaded → offloaded again in the same Excel must create
+  // two separate DB records. We process rows in sequence and pair each gate-in with
+  // the next gate-out for that container (if any), then start fresh for the next gate-in.
 
   // Auto-detect column layout by inspecting first data row:
   // OLD format: [SL, Date, Container, TypeOfWork, Client, SalesRef, ...]  → indices 1,2,3,4,5
@@ -905,7 +904,6 @@ function processImportRows(rawRows){
   let colDate=1,colCnum=2,colOp=3,colClient=4,colRef=5;
   if(dataRows.length){
     const fr=dataRows[0];
-    // If col[0] looks like a date and col[1] looks like a container number → new format
     const c0=String(fr[0]||'').trim();
     const c1=String(fr[1]||'').trim();
     const looksDate=/^\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4}$/.test(c0)||(!isNaN(Number(c0))&&Number(c0)>40000&&Number(c0)<100000);
@@ -913,6 +911,8 @@ function processImportRows(rawRows){
     if(looksDate||looksContainer){colDate=0;colCnum=1;colOp=2;colClient=3;colRef=5;}
   }
 
+  // Build an ordered list of move events from the Excel rows
+  const moveEvents=[]; // {type:'in'|'out'|'cross', cnum, rawCnum, date, clientName, salesRef}
   for(const row of dataRows){
     if(!row||row.every(v=>v===null||v===''))continue;
     const rawCnum=String(row[colCnum]||'').trim();
@@ -921,83 +921,120 @@ function processImportRows(rawRows){
     if(!cnum)continue;
     const date=parseExcelDate(row[colDate]);
     const typeOfWork=String(row[colOp]||'');
-    const clientName=String(row[colClient]||'').trim();
+    const clientNameVal=String(row[colClient]||'').trim();
     const salesRef=String(row[colRef]||'').trim();
     const mapped=mapOpType(typeOfWork);
     if(!mapped)continue;
     if(mapped.op==='cross'){
-      crossRows.push({date,cnum,rawCnum,clientName,salesRef});
+      moveEvents.push({type:'cross',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
     }else if(!mapped.loaded){
-      // gate-in
-      if(!gateInMap[cnum])gateInMap[cnum]={date,clientName,salesRef,rawCnum};
+      moveEvents.push({type:'in',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
     }else{
-      // gate-out
-      if(!gateOutMap[cnum])gateOutMap[cnum]={date};
+      moveEvents.push({type:'out',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
     }
   }
 
-  // Now decide action per container:
-  // 1. Gate-in rows: INSERT if not already in DB, else SKIP
-  // 2. Gate-out rows: UPDATE existing unloaded entry if found, else SKIP
-  // 3. Cross rows: INSERT always (no dup check — cross loads are ephemeral)
+  // Pair gate-ins with gate-outs in order per container number.
+  // Multiple in→out→in cycles produce multiple trip records.
+  const trips=[]; // [{cnum, rawCnum, inDate, outDate|null, clientName, salesRef}]
+  const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef}]
+  const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef} — waiting for gate-out
+  for(const ev of moveEvents){
+    if(ev.type==='cross'){
+      crossList.push(ev);
+    }else if(ev.type==='in'){
+      // If already have an open gate-in for this container, close it without gate-out first
+      if(pendingIn[ev.cnum]){
+        trips.push({cnum:ev.cnum,rawCnum:pendingIn[ev.cnum].rawCnum,inDate:pendingIn[ev.cnum].date,outDate:null,clientName:pendingIn[ev.cnum].clientName,salesRef:pendingIn[ev.cnum].salesRef});
+      }
+      pendingIn[ev.cnum]={date:ev.date,rawCnum:ev.rawCnum,clientName:ev.clientName,salesRef:ev.salesRef};
+    }else if(ev.type==='out'){
+      if(pendingIn[ev.cnum]){
+        // Pair with open gate-in
+        trips.push({cnum:ev.cnum,rawCnum:pendingIn[ev.cnum].rawCnum,inDate:pendingIn[ev.cnum].date,outDate:ev.date,clientName:pendingIn[ev.cnum].clientName,salesRef:pendingIn[ev.cnum].salesRef});
+        delete pendingIn[ev.cnum];
+      }else{
+        // Gate-out with no gate-in in this Excel → standalone gate-out (update DB)
+        trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef});
+      }
+    }
+  }
+  // Any remaining open gate-ins with no gate-out
+  for(const[cnum,info]of Object.entries(pendingIn)){
+    trips.push({cnum,rawCnum:info.rawCnum,inDate:info.date,outDate:null,clientName:info.clientName,salesRef:info.salesRef});
+  }
 
+  // Now decide action per trip:
   const actions=[]; // [{action:'new'|'update'|'skip'|'mismatch', ...}]
-  const existingActive=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded);
+  // existingActive: containers currently in yard (unloaded, not yet loaded)
+  // We clone this and update it as we process, so a container offloaded in this
+  // Excel and then loaded again is correctly handled for the 2nd offloading.
+  const existingActive=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded).map(e=>({...e}));
+  const newlyInserted=[]; // track containers we insert during this processing pass
 
-  // Map client names from Excel to CLIENTS list
   function findClientId(nameFromExcel){
     if(!nameFromExcel)return null;
     const n=nameFromExcel.trim().toUpperCase();
     const exact=CLIENTS.find(c=>c.name.trim().toUpperCase()===n);
     if(exact)return exact.id;
-    // fuzzy: try includes
     const partial=CLIENTS.find(c=>c.name.trim().toUpperCase().includes(n)||n.includes(c.name.trim().toUpperCase()));
     return partial?partial.id:null;
   }
 
-  // Check if a container exists (with soft match too)
   function findExistingByNorm(cnum){
     return existingActive.find(e=>normCnum(e.containerNo)===cnum)||null;
   }
 
-  // Process gate-in rows
-  for(const[cnum,info]of Object.entries(gateInMap)){
-    const existing=findExistingByNorm(cnum);
-    const hasGateOut=!!gateOutMap[cnum];
-    const clientId=findClientId(info.clientName);
-    if(existing){
-      // container already in yard — skip gate-in but handle gate-out
-      if(hasGateOut&&!existing.loadDate){
-        actions.push({action:'update',existingId:existing.id,loadDate:gateOutMap[cnum].date,cnum:existing.containerNo,clientName:info.clientName,info});
-      }else{
-        actions.push({action:'skip',reason:'already in yard',cnum:info.rawCnum,clientName:info.clientName,info});
-      }
-    }else{
-      // Check for near-match (possible typo) — same first 4 chars, similar digits
-      const prefix=cnum.slice(0,4);
-      const near=existingActive.find(e=>normCnum(e.containerNo).slice(0,4)===prefix&&normCnum(e.containerNo)!==cnum);
-      if(near){
-        actions.push({action:'mismatch',xlCnum:info.rawCnum,normXl:cnum,dbCnum:near.containerNo,date:info.date,clientId,clientName:info.clientName,salesRef:info.salesRef,loadDate:hasGateOut?gateOutMap[cnum].date:null,loaded:hasGateOut});
-      }else{
-        actions.push({action:'new',cnum,rawCnum:info.rawCnum,date:info.date,clientId,clientName:info.clientName,salesRef:info.salesRef,loadDate:hasGateOut?gateOutMap[cnum].date:null,loaded:hasGateOut});
-      }
-    }
-  }
+  function editDist(a,b){const m=a.length,n=b.length;const d=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=a[i-1]===b[j-1]?d[i-1][j-1]:1+Math.min(d[i-1][j],d[i][j-1],d[i-1][j-1]);return d[m][n];}
 
-  // Process gate-out rows where there was no matching gate-in in this Excel
-  for(const[cnum,info]of Object.entries(gateOutMap)){
-    if(gateInMap[cnum])continue; // already handled above
-    const existing=findExistingByNorm(cnum);
-    if(existing&&!existing.loadDate){
-      actions.push({action:'update',existingId:existing.id,loadDate:info.date,cnum:existing.containerNo,clientName:clientName(existing.clientId)});
-    }else if(!existing){
-      actions.push({action:'skip',reason:'gate-out but not in yard',cnum,clientName:'–'});
+  for(const trip of trips){
+    const{cnum,rawCnum,inDate,outDate,clientName:cName,salesRef}=trip;
+    const clientId=findClientId(cName);
+
+    if(inDate){
+      // This trip has a gate-in
+      const existing=findExistingByNorm(cnum);
+      if(existing){
+        // Already in yard — skip the gate-in, but apply gate-out if present
+        if(outDate){
+          actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:cName});
+          // Remove from existingActive so a subsequent gate-in for same container is treated as new
+          const idx=existingActive.findIndex(e=>e.id===existing.id);
+          if(idx>=0)existingActive.splice(idx,1);
+        }else{
+          actions.push({action:'skip',reason:'already in yard',cnum:rawCnum,clientName:cName});
+        }
+      }else{
+        // New gate-in — check for typo mismatch
+        const prefix=cnum.slice(0,4);
+        const digits=cnum.slice(4);
+        const near=existingActive.find(e=>{const nc=normCnum(e.containerNo);return nc.slice(0,4)===prefix&&nc!==cnum&&editDist(nc.slice(4),digits)<=2;});
+        if(near){
+          actions.push({action:'mismatch',xlCnum:rawCnum,normXl:cnum,dbCnum:near.containerNo,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate});
+        }else{
+          actions.push({action:'new',cnum,rawCnum,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,op:'unload'});
+          if(!outDate){
+            // Insert into existingActive so a subsequent gate-out for same container can match it
+            newlyInserted.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null});
+            existingActive.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null});
+          }
+        }
+      }
+    }else if(outDate){
+      // Standalone gate-out (no gate-in in this Excel)
+      const existing=findExistingByNorm(cnum);
+      if(existing){
+        actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:clientName(existing.clientId)});
+        const idx=existingActive.findIndex(e=>e.id===existing.id);
+        if(idx>=0)existingActive.splice(idx,1);
+      }else{
+        actions.push({action:'skip',reason:'gate-out but not in yard',cnum:rawCnum,clientName:'–'});
+      }
     }
-    // if existing but already has loadDate — skip
   }
 
   // Process cross rows
-  for(const cr of crossRows){
+  for(const cr of crossList){
     const clientId=findClientId(cr.clientName);
     // Check if this exact cross-load already in DB (same container + date)
     const dupCross=DB.find(e=>!e.deleted&&e.op==='cross'&&normCnum(e.containerNo)===cr.cnum&&e.unloadDate===cr.date);
@@ -1022,7 +1059,9 @@ function renderImportPreview(actions){
   const mismatchRows=actions.filter(a=>a.action==='mismatch');
 
   // Summary pills
+  const totalImporting=newRows.length+updateRows.length+mismatchRows.length;
   document.getElementById('import-summary').innerHTML=
+    `<span class="import-pill" style="background:var(--bg3);color:var(--text);font-weight:700">Total: ${totalImporting}</span>`+
     `<span class="import-pill import-pill-new">✚ ${newRows.length} new</span>`+
     `<span class="import-pill import-pill-update">↑ ${updateRows.length} updates</span>`+
     `<span class="import-pill import-pill-skip">— ${skipRows.length} skipped</span>`+
@@ -1112,6 +1151,8 @@ async function commitImport(){
   if(!actions.length){closeModal('modal-import');return}
   setSyncStatus('saving');
   let inserted=0,updated=0,errors=0;
+  const undoInsertedIds=[];
+  const undoUpdatedIds=[];
 
   for(const a of actions){
     if(a.action==='skip')continue;
@@ -1123,13 +1164,17 @@ async function commitImport(){
       const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
       const{data,error}=await sb.from('transactions').insert(row).select().single();
       if(error){errors++;continue}
-      DB.unshift(rowToEntry(data));inserted++;
+      DB.unshift(rowToEntry(data));undoInsertedIds.push(data.id);inserted++;
     }
 
     else if(a.action==='update'){
+      const existing=DB.find(x=>x.id===a.existingId);
+      const prevLoaded=existing?existing.loaded:false;
+      const prevLoadDate=existing?existing.loadDate:null;
       const{error}=await sb.from('transactions').update({loaded:true,load_date:a.loadDate}).eq('id',a.existingId);
       if(error){errors++;continue}
-      const e=DB.find(x=>x.id===a.existingId);if(e){e.loaded=true;e.loadDate=a.loadDate}
+      if(existing){existing.loaded=true;existing.loadDate=a.loadDate}
+      undoUpdatedIds.push({id:a.existingId,prevLoaded,prevLoadDate});
       updated++;
     }
 
@@ -1139,9 +1184,11 @@ async function commitImport(){
         // treat as gate-out update for existing DB record
         const existing=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&normCnum(e.containerNo)===normCnum(a.dbCnum));
         if(existing){
+          const prevLoaded=existing.loaded;const prevLoadDate=existing.loadDate;
           const{error}=await sb.from('transactions').update({loaded:a.loaded,load_date:a.loaded?a.loadDate||a.date:null}).eq('id',existing.id);
           if(error){errors++;continue}
-          if(existing){existing.loaded=a.loaded;existing.loadDate=a.loaded?a.loadDate||a.date:null}
+          existing.loaded=a.loaded;existing.loadDate=a.loaded?a.loadDate||a.date:null;
+          undoUpdatedIds.push({id:existing.id,prevLoaded,prevLoadDate});
           updated++;
         }
       }else{
@@ -1150,14 +1197,52 @@ async function commitImport(){
         const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
         const{data,error}=await sb.from('transactions').insert(row).select().single();
         if(error){errors++;continue}
-        DB.unshift(rowToEntry(data));inserted++;
+        DB.unshift(rowToEntry(data));undoInsertedIds.push(data.id);inserted++;
       }
     }
   }
 
+  // Save undo state so the toolbar button appears
+  lastImportUndo=(undoInsertedIds.length||undoUpdatedIds.length)?{insertedIds:undoInsertedIds,updatedIds:undoUpdatedIds}:null;
+  updateUndoImportBtn();
+
   importParsedRows=[];importMismatchMap={};
   closeModal('modal-import');setSyncStatus('saved');render();
-  alert(`Import complete!\n✚ Inserted: ${inserted}\n↑ Updated: ${updated}${errors?`\n⚠ Errors: ${errors}`:''}`);
+  alert(`Import complete!\nTotal: ${inserted+updated}\n✚ Inserted: ${inserted}\n↑ Updated: ${updated}${errors?`\n⚠ Errors: ${errors}`:''}`);
+}
+function updateUndoImportBtn(){
+  const btn=document.getElementById('undo-import-btn');
+  if(!btn)return;
+  if(lastImportUndo){
+    const n=lastImportUndo.insertedIds.length+lastImportUndo.updatedIds.length;
+    btn.style.display='';
+    btn.textContent=`↩ Undo Import (${n})`;
+  }else{
+    btn.style.display='none';
+  }
+}
+
+async function undoLastImport(){
+  if(!lastImportUndo){alert('Nothing to undo.');return}
+  const{insertedIds,updatedIds}=lastImportUndo;
+  const total=insertedIds.length+updatedIds.length;
+  if(!confirm(`Undo last import?\nThis will delete ${insertedIds.length} inserted record(s) and revert ${updatedIds.length} gate-out update(s).`))return;
+  setSyncStatus('saving');
+  let errors=0;
+  for(const id of insertedIds){
+    const{error}=await sb.from('transactions').update({deleted:true}).eq('id',id);
+    if(error){errors++;continue}
+    const e=DB.find(x=>x.id===id);if(e)e.deleted=true;
+  }
+  for(const{id,prevLoaded,prevLoadDate}of updatedIds){
+    const{error}=await sb.from('transactions').update({loaded:prevLoaded,load_date:prevLoadDate}).eq('id',id);
+    if(error){errors++;continue}
+    const e=DB.find(x=>x.id===id);if(e){e.loaded=prevLoaded;e.loadDate=prevLoadDate;}
+  }
+  lastImportUndo=null;
+  updateUndoImportBtn();
+  setSyncStatus('saved');render();
+  alert(`Undo complete. ${total-errors} change(s) reversed.${errors?`\n⚠ ${errors} error(s).`:''}`);
 }
 // ─── End Daily Excel Import ───────────────────────────────────────────────────
 
@@ -1300,15 +1385,47 @@ function yardRow(e){
   </tr>`;
 }
 
+// Sort state for main tables
+let allSort={col:'unloadDate',dir:'desc'};
+let yardSort={col:'unloadDate',dir:'asc'};
+
+function thSort(state,col,label,opts={}){
+  const active=state.col===col;
+  const arrow=active?(state.dir==='asc'?'▲':'▼'):'⇅';
+  const style=`cursor:pointer;user-select:none;white-space:nowrap;${opts.center?'text-align:center;':''}${active?'color:var(--primary)':'color:var(--text2)'}`;
+  return`<th style="${style}" onclick="${opts.fn||'sortAll'}('${col}')">${label} <span style="font-size:10px">${arrow}</span></th>`;
+}
+
 function tableWrap(rows,tfoot){
+  const s=allSort;
   return`<div class="overflow-x"><table>
-    <thead><tr><th style="width:40px"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th>Gate Out</th><th style="text-align:center">Days</th><th>Status</th><th>By</th><th>Invoice</th><th></th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="9" class="empty">No records found.</td></tr>'}</tbody>${tfoot||''}
+    <thead><tr>
+      <th style="width:40px"></th>
+      ${thSort(s,'containerNo','Container no.',{fn:'sortAll'})}
+      ${thSort(s,'clientId','Client',{fn:'sortAll'})}
+      ${thSort(s,'unloadDate','Gate In',{fn:'sortAll'})}
+      ${thSort(s,'loadDate','Gate Out',{fn:'sortAll'})}
+      <th style="text-align:center">Days</th>
+      <th>Status</th>
+      <th>By</th>
+      <th>Invoice</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows||'<tr><td colspan="10" class="empty">No records found.</td></tr>'}</tbody>${tfoot||''}
   </table></div>`;
 }
 function yardTableWrap(rows){
+  const s=yardSort;
   return`<div class="overflow-x"><table>
-    <thead><tr><th style="width:40px"><input type="checkbox" onchange="toggleSelectAllLoad(this.checked)"></th><th>Container no.</th><th>Client</th><th>Gate In</th><th style="text-align:center">Days</th><th>Status</th><th>Action</th></tr></thead>
+    <thead><tr>
+      <th style="width:40px"><input type="checkbox" onchange="toggleSelectAllLoad(this.checked)"></th>
+      ${thSort(s,'containerNo','Container no.',{fn:'sortYard'})}
+      ${thSort(s,'clientId','Client',{fn:'sortYard'})}
+      ${thSort(s,'unloadDate','Gate In',{fn:'sortYard'})}
+      <th style="text-align:center">Days</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr></thead>
     <tbody>${rows||'<tr><td colspan="7" class="empty">No records found.</td></tr>'}</tbody>
   </table></div>`;
 }
@@ -1333,11 +1450,34 @@ function renderStats(){
     <div class="stat" onclick="switchTab('clients',document.getElementById('tab-btn-clients'))"><div class="stat-label">Clients</div><div class="stat-num">${clientCount}</div></div>`;
 }
 
+function applySortEntries(arr,state){
+  const{col,dir}=state;
+  return [...arr].sort((a,b)=>{
+    let av,bv;
+    if(col==='clientId'){av=clientName(a.clientId)||'';bv=clientName(b.clientId)||'';}
+    else{av=a[col]||'';bv=b[col]||'';}
+    const cmp=av<bv?-1:av>bv?1:0;
+    return dir==='asc'?cmp:-cmp;
+  });
+}
+
+function sortAll(col){
+  if(allSort.col===col)allSort.dir=allSort.dir==='asc'?'desc':'asc';
+  else{allSort={col,dir:'asc'};}
+  renderAllTable();
+}
+function sortYard(col){
+  if(yardSort.col===col)yardSort.dir=yardSort.dir==='asc'?'desc':'asc';
+  else{yardSort={col,dir:'asc'};}
+  renderYard();
+}
+
 function renderYard(){
   const data=filterByCl(DB.filter(e=>!e.deleted));
-  const inYard=data.filter(e=>e.op==='unload'&&!e.loaded);
+  let inYard=data.filter(e=>e.op==='unload'&&!e.loaded);
   const inYardIds=new Set(inYard.map(e=>e.id));
   selectedLoad.forEach(id=>{if(!inYardIds.has(id))selectedLoad.delete(id)});
+  inYard=applySortEntries(inYard,yardSort);
   document.getElementById('tab-yard').innerHTML=
     `<div class="filter-bar"><button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button></div>`+
     yardTableWrap(inYard.map(e=>yardRow(e)).join(''));
@@ -1371,7 +1511,7 @@ function renderAllTable(){
   if(inv==='0')data=data.filter(e=>!e.invoiced);
   if(inv==='1')data=data.filter(e=>e.invoiced);
   if(cl)data=data.filter(e=>e.clientId===cl);
-  data.sort((a,b)=>{const aIY=a.op==='unload'&&!a.loaded,bIY=b.op==='unload'&&!b.loaded;if(aIY&&!bIY)return-1;if(!aIY&&bIY)return 1;return(a.unloadDate||'').localeCompare(b.unloadDate||'')});
+  data=applySortEntries(data,allSort);
   document.getElementById('all-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''));
 }
 
