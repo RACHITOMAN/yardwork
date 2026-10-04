@@ -94,9 +94,29 @@ th[onclick]:hover{background:var(--bg3)!important;transition:background .15s}
 .import-row-update td{background:#eff6ff}
 .import-row-skip td{color:#9ca3af}
 .import-row-mismatch td{background:#fefce8}
+
+/* ── Client portal mode ── */
+body.client-portal .topbar-right{display:none!important}
+body.client-portal #tab-btn-all{display:none!important}
+body.client-portal #tab-btn-pending{display:none!important}
+body.client-portal #tab-btn-invoiced{display:none!important}
+body.client-portal #tab-btn-payments{display:none!important}
+body.client-portal #tab-btn-unpaid{display:none!important}
+body.client-portal #tab-btn-clients{display:none!important}
+body.client-portal #tab-btn-rates{display:none!important}
+body.client-portal #stats{display:none!important}
+body.client-portal .global-client-filter{display:none!important}
 </style>
 </head>
 <body>
+<script>
+// Apply client-portal class IMMEDIATELY — before any element renders
+(function(){
+  var isPortal=window.location.hash.match(/^#client=/)||new URLSearchParams(window.location.search).get('client');
+  if(isPortal){document.documentElement.classList.add('client-portal-pending')}
+  window._IS_CLIENT_PORTAL=!!isPortal;
+})();
+</script>
 <!-- Login -->
 <div id="login-screen">
   <div class="login-card">
@@ -394,6 +414,8 @@ async function syncNow(){
 const USERS=['RACHIT','YARD','VISHNU','MANISHA'];
 let activeUser=localStorage.getItem('yardActiveUser')||null;
 
+function isClientPortal(){return window._IS_CLIENT_PORTAL===true}
+
 function selectUser(name){
   activeUser=name;
   localStorage.setItem('yardActiveUser',name);
@@ -413,8 +435,13 @@ async function startApp(){
   await loadData();
   document.getElementById('loading-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  if(isClientPortal()){
+    document.body.classList.add('client-portal');
+    const titleEl=document.querySelector('.app-title');
+    if(titleEl)titleEl.textContent='📦 Container Tracker — Client View';
+  }
   document.getElementById('today-label').textContent='Today: '+fmt(today());
-  document.getElementById('active-user-label').textContent='👤 '+activeUser;
+  if(!isClientPortal())document.getElementById('active-user-label').textContent='👤 '+activeUser;
   populateClientDropdowns();
   applyUrlClientFilter();
   render();
@@ -423,6 +450,25 @@ async function startApp(){
     try{await loadData();populateClientDropdowns();render();setSyncStatus('saved')}catch(e){}
   },60000);
 }
+
+// Auto-start in client portal mode — skip login screen entirely
+(function(){
+  if(window._IS_CLIENT_PORTAL){
+    activeUser='PORTAL';
+    // Wait for DOM ready
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',startApp);
+    }else{
+      startApp();
+    }
+  }else if(activeUser){
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',startApp);
+    }else{
+      startApp();
+    }
+  }
+})();
 
 function populateClientDropdowns(){
   const sorted=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
@@ -447,10 +493,29 @@ function applyUrlClientFilter(){
   let p=new URLSearchParams(window.location.search).get('client');
   if(!p){const m=window.location.hash.match(/^#client=(.+)$/);if(m)p=decodeURIComponent(m[1])}
   if(!p)return;
-  const c=CLIENTS.find(x=>!x.deleted&&(x.id===p||x.name.trim().toUpperCase()===p.trim().toUpperCase()));
-  if(!c)return;
+  const param=p.trim();
+  let c=CLIENTS.find(x=>!x.deleted&&x.id===param);
+  if(!c)c=CLIENTS.find(x=>!x.deleted&&x.name.trim().toUpperCase()===param.toUpperCase());
+  if(!c){
+    if(isClientPortal()){
+      // Invalid or unrecognised client link — show error, never fall through to all-data view
+      if(!CLIENTS.length){
+        document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc"><div style="font-size:48px">⚠️</div><div style="font-size:20px;font-weight:600;color:#1e293b">Unable to Load</div><div style="font-size:14px;color:#64748b;text-align:center;max-width:320px">Could not connect to the server. Please check your connection and <a href="javascript:location.reload()" style="color:#1D9E75">try again</a>.</div></div>`;
+      }else{
+        document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;flex-direction:column;gap:16px;background:#f8fafc"><div style="font-size:48px">🔒</div><div style="font-size:20px;font-weight:600;color:#1e293b">Invalid Link</div><div style="font-size:14px;color:#64748b;text-align:center;max-width:320px">This client portal link is not valid or has expired. Please contact the yard for a new link.</div></div>`;
+      }
+    }
+    return;
+  }
   globalClientFilter=c.id;
-  const el=document.getElementById('global-client-filter');if(el)el.value=c.id;
+  // In portal mode: lock the filter — hide dropdown, auto-open client detail
+  if(isClientPortal()){
+    const gf=document.getElementById('global-client-filter');if(gf)gf.style.display='none';
+    // After render, open the client detail panel automatically
+    window._portalClientId=c.id;
+  }else{
+    const el=document.getElementById('global-client-filter');if(el)el.value=c.id;
+  }
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('open')}
@@ -1343,6 +1408,25 @@ async function exportClientPendingPaymentExcel(cid){
   XLSX.writeFile(wb,`${c?c.name:'Client'}_PendingPayment_${today()}.xlsx`);
 }
 
+// Portal-safe entry row (no invoice/financial/action columns)
+function entryRowPortal(e){
+  const isCross=e.op==='cross';
+  const statusBadge=isCross?'<span class="badge badge-cross">Cross-load</span>':'<span class="badge badge-out">Loaded</span>';
+  return`<tr>
+    <td><strong>${esc(e.containerNo)}</strong>${e.remarks?`<div style="font-size:11px;color:var(--text2);margin-top:2px">${esc(e.remarks)}</div>`:''}</td>
+    <td>${fmt(e.unloadDate)}</td>
+    <td>${fmt(e.loadDate)}</td>
+    <td style="text-align:center">${calcTotal(e).days}</td>
+    <td>${statusBadge}</td>
+  </tr>`;
+}
+function portalTableWrap(rows){
+  return`<div class="overflow-x"><table>
+    <thead><tr><th>Container No.</th><th>Gate In</th><th>Gate Out</th><th style="text-align:center">Days</th><th>Status</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="5" class="empty">No records found.</td></tr>'}</tbody>
+  </table></div>`;
+}
+
 // Rendering helpers
 function entryRow(e){
   const inYard=!e.deleted&&e.op==='unload'&&!e.loaded;
@@ -1627,6 +1711,13 @@ function renderUnpaidTable(){
 }
 
 function renderClients(){
+  // In portal mode the client list is never shown — only the detail panel matters
+  if(isClientPortal()){
+    // Ensure the tab-clients div is empty (detail panel gets appended separately)
+    const tc=document.getElementById('tab-clients');
+    if(tc&&!document.getElementById('client-detail-panel'))tc.innerHTML='';
+    return;
+  }
   const active=CLIENTS.filter(c=>!c.deleted).sort((a,b)=>a.name.localeCompare(b.name));
 
   function clientRowHtml(c,i){
@@ -1679,21 +1770,37 @@ function setDetailTab(cid,tab){window._detailClientId=cid;window._detailTab=tab;
 function closeClientDetail(){window._detailClientId=null;window._detailTab=null;const p=document.getElementById('client-detail-panel');if(p)p.remove()}
 
 function renderClientDetail(cid,tab){
-  if(!cid)return;tab=tab||'inyard';
+  if(!cid)return;
+  const portal=isClientPortal();
+  tab=tab||'inyard';
+  // Portal mode: restrict to safe tabs only
+  if(portal&&tab!=='inyard'&&tab!=='completed')tab='inyard';
   const c=clientById(cid);if(!c)return;
   const ai=CLIENTS.filter(x=>!x.deleted).findIndex(x=>x.id===cid)%AV_BG.length;
   const txAll=DB.filter(e=>!e.deleted&&e.clientId===cid);
   const inYardRows=txAll.filter(e=>e.op==='unload'&&!e.loaded);
+  const completedRows=txAll.filter(e=>e.op==='unload'&&e.loaded).sort((a,b)=>(b.loadDate||'').localeCompare(a.loadDate||''));
   const allRows=[...txAll].sort((a,b)=>(b.unloadDate||'').localeCompare(a.unloadDate||''));
   const pendingRows=txAll.filter(e=>!e.invoiced&&(e.op==='cross'||(e.op==='unload'&&e.loaded)));
   const invoicedRows=txAll.filter(e=>e.invoiced);
   const unpaidInvGroups={};
   invoicedRows.filter(e=>!e.paidDate&&e.invoiceNo).forEach(e=>{(unpaidInvGroups[e.invoiceNo]=unpaidInvGroups[e.invoiceNo]||[]).push(e)});
-  const TABS=[['inyard',`In Yard (${inYardRows.length})`],['alltx',`All Transactions (${txAll.length})`],['pending',`Pending Invoice (${pendingRows.length})`],['invoiced',`Invoiced (${invoicedRows.length})`],['ppay',`Pending Payment (${Object.keys(unpaidInvGroups).length} inv)`]];
+  const TABS=portal?[
+    ['inyard',`In Yard (${inYardRows.length})`],
+    ['completed',`Completed (${completedRows.length})`]
+  ]:[
+    ['inyard',`In Yard (${inYardRows.length})`],
+    ['alltx',`All Transactions (${txAll.length})`],
+    ['pending',`Pending Invoice (${pendingRows.length})`],
+    ['invoiced',`Invoiced (${invoicedRows.length})`],
+    ['ppay',`Pending Payment (${Object.keys(unpaidInvGroups).length} inv)`]
+  ];
   const tabBtns=TABS.map(([id,lbl])=>`<button class="cdp-tab${tab===id?' active':''}" onclick="setDetailTab('${cid}','${id}')">${lbl}</button>`).join('');
   let bodyHtml='';
   if(tab==='inyard'){
     bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-bulk btn-sm" onclick="exportClientInYardExcel('${cid}')">📊 Export Excel</button></div>`+(inYardRows.length?yardTableWrap(inYardRows.map(e=>yardRow(e)).join('')):'<div class="empty">No containers in yard.</div>');
+  }else if(tab==='completed'){
+    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-bulk btn-sm" onclick="exportClientCompletedExcel('${cid}')">📊 Export Excel</button></div>`+(completedRows.length?portalTableWrap(completedRows.map(e=>entryRowPortal(e)).join('')):'<div class="empty">No completed containers.</div>');
   }else if(tab==='alltx'){
     const total=allRows.reduce((s,e)=>s+calcTotal(e).total,0);
     const tfoot=allRows.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
@@ -1722,24 +1829,27 @@ function renderClientDetail(cid,tab){
     bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-bulk btn-sm" onclick="exportClientPendingPaymentExcel('${cid}')">📊 Export Excel</button></div>
     <div class="overflow-x"><table><thead><tr><th>Invoice No.</th><th style="text-align:center">Containers</th><th>Amount</th><th>Status</th><th>Container nos.</th></tr></thead><tbody>${rows||'<tr><td colspan="5" class="empty">No unpaid invoices.</td></tr>'}</tbody>${tfoot}</table></div>`;
   }
-  const totalBilled=invoicedRows.reduce((s,e)=>s+calcTotal(e).total,0);
-  const unpaidAmt=invoicedRows.filter(e=>!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
   let panel=document.getElementById('client-detail-panel');
   if(!panel){panel=document.createElement('div');panel.id='client-detail-panel';panel.className='client-detail-panel';document.getElementById('tab-clients').appendChild(panel)}
+  const totalBilled2=invoicedRows.reduce((s,e)=>s+calcTotal(e).total,0);
+  const unpaidAmt2=invoicedRows.filter(e=>!e.paidDate).reduce((s,e)=>s+calcTotal(e).total,0);
   panel.innerHTML=`
     <div class="cdp-header">
       <div class="client-avatar" style="background:${AV_BG[ai]};color:${AV_TX[ai]};width:40px;height:40px;font-size:14px">${initials(c.name)}</div>
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:15px">${esc(c.name)}</div>
         <div style="font-size:12px;color:var(--text2)">
-          <span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
-          <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
-          RO ${totalBilled.toFixed(2)} billed &bull;
-          <span style="color:#B3261E">RO ${unpaidAmt.toFixed(2)} unpaid</span> &bull;
-          ${txAll.length} total transactions
+          ${portal
+            ? `<span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull; ${completedRows.length} completed`
+            : `<span style="color:#1D9E75">${inYardRows.length} in yard</span> &bull;
+               <span style="color:#BA7517">${pendingRows.length} pending invoice</span> &bull;
+               RO ${totalBilled2.toFixed(2)} billed &bull;
+               <span style="color:#B3261E">RO ${unpaidAmt2.toFixed(2)} unpaid</span> &bull;
+               ${txAll.length} total transactions`
+          }
         </div>
       </div>
-      <button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>
+      ${portal?'':`<button class="btn btn-sm" onclick="closeClientDetail()">✕ Close</button>`}
     </div>
     <div class="cdp-tabs">${tabBtns}</div>
     <div class="cdp-body">${bodyHtml}</div>`;
@@ -1777,6 +1887,23 @@ function switchTab(tab,el){
 
 function render(){
   renderStats();
+  if(isClientPortal()){
+    // Portal mode: always show clients tab → client detail only
+    if(currentTab!=='clients'){
+      currentTab='clients';
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      const yardBtn=document.getElementById('tab-btn-yard');
+      if(yardBtn)yardBtn.classList.add('active');
+      ['yard','all','pending','invoiced','payments','unpaid','clients','rates'].forEach(t=>{
+        const el=document.getElementById('tab-'+t);if(el)el.style.display=(t==='clients'?'block':'none');
+      });
+    }
+    renderClients();
+    if(window._portalClientId){
+      renderClientDetail(window._portalClientId,'inyard');
+    }
+    return;
+  }
   if(currentTab==='yard')renderYard();
   else if(currentTab==='all')renderAll();
   else if(currentTab==='pending')renderPending();
@@ -1787,9 +1914,15 @@ function render(){
   else if(currentTab==='rates')renderRates();
 }
 
-(async function(){
-  if(activeUser)await startApp();
-  // else login screen is already visible
+// Boot: portal mode bypasses login; otherwise check for saved user
+(function(){
+  if(!window._IS_CLIENT_PORTAL){
+    // Normal mode — auto-start if user already selected
+    (async function(){
+      if(activeUser)await startApp();
+    })();
+  }
+  // Portal mode auto-start is handled by the IIFE above near selectUser()
 })();
 </script>
 </body>
