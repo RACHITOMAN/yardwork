@@ -990,7 +990,12 @@ function processImportRows(rawRows){
     const clientNameVal=String(row[colClient]||'').trim();
     const salesRef=String(row[colRef]||'').trim();
     const mapped=mapOpType(typeOfWork);
-    if(!mapped)continue;
+    if(!mapped){
+      // Unknown operation type — show as skipped with reason so user can see it
+      // We push directly to a separate unknownRows list and convert to skip actions after
+      moveEvents.push({type:'unknown',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:false,remarks:'',reason:'Unknown op: '+typeOfWork.trim()});
+      continue;
+    }
     // Build remarks: prepend EMPTY if applicable, then append column F value
     const remarksParts=[];
     if(mapped.isEmpty)remarksParts.push('EMPTY');
@@ -1014,7 +1019,12 @@ function processImportRows(rawRows){
   const trips=[]; // [{cnum, rawCnum, inDate, outDate|null, clientName, salesRef}]
   const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef, isEmpty, remarks}]
   const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef, isEmpty, remarks} — waiting for gate-out
+  const unknownSkips=[];
   for(const ev of moveEvents){
+    if(ev.type==='unknown'){
+      unknownSkips.push({action:'skip',reason:ev.reason,cnum:ev.rawCnum,clientName:ev.clientName||'–'});
+      continue;
+    }
     if(ev.type==='cross'){
       crossList.push(ev);
     }else if(ev.type==='in'){
@@ -1026,19 +1036,13 @@ function processImportRows(rawRows){
       pendingIn[ev.cnum]={date:ev.date,rawCnum:ev.rawCnum,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,remarks:ev.remarks};
     }else if(ev.type==='out'){
       if(pendingIn[ev.cnum]){
-        // Container has a pending gate-in in this file.
-        // If the container is ALSO already in the DB yard, the gate-out belongs to that
-        // existing DB record — emit it as a standalone update and keep the pending gate-in
-        // as a separate new entry (don't pair them).
-        if(existingYardNorms.has(ev.cnum)){
-          trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
-          // pendingIn stays open — will become a new gate-in record
-        }else{
-          // Not in DB yard — pair the in→out as a single completed trip
-          const p=pendingIn[ev.cnum];
-          trips.push({cnum:ev.cnum,rawCnum:p.rawCnum,inDate:p.date,outDate:ev.date,clientName:p.clientName,salesRef:p.salesRef,isEmpty:p.isEmpty,inRemarks:p.remarks,outRemarks:ev.remarks,outIsEmpty:ev.isEmpty});
-          delete pendingIn[ev.cnum];
-        }
+        // Container appears as UNLOADING then LOADING in same Excel.
+        // Always treat as 2 separate entries:
+        //   gate-out trip → standalone (updates existing DB record, or new completed if none)
+        //   gate-in (pendingIn) → stays open, becomes a new entry
+        const p=pendingIn[ev.cnum];
+        trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
+        // Keep pendingIn open — will flush as new gate-in entry at end
       }else{
         // Gate-out with no gate-in in this Excel → standalone gate-out (update DB)
         trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
@@ -1051,7 +1055,7 @@ function processImportRows(rawRows){
   }
 
   // Now decide action per trip:
-  const actions=[]; // [{action:'new'|'update'|'skip'|'mismatch', ...}]
+  const actions=[...unknownSkips]; // [{action:'new'|'update'|'skip'|'mismatch', ...}]
   // existingActive: containers currently in yard (unloaded, not yet loaded)
   // We clone this and update it as we process, so a container offloaded in this
   // Excel and then loaded again is correctly handled for the 2nd offloading.
