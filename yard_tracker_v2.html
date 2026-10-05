@@ -1011,8 +1011,6 @@ function processImportRows(rawRows){
   // in the same Excel, the gate-out belongs to the existing DB record (standalone update)
   // and the gate-in is a brand-new separate entry — do NOT collapse them into one trip.
   const existingYardNorms=new Set(DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded).map(e=>normCnum(e.containerNo)));
-  console.log('[Import] existingYardNorms ('+existingYardNorms.size+'):',[...existingYardNorms].join(', '));
-  console.log('[Import] moveEvents:',moveEvents.map(e=>e.type+':'+e.cnum).join(', '));
   const trips=[]; // [{cnum, rawCnum, inDate, outDate|null, clientName, salesRef}]
   const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef, isEmpty, remarks}]
   const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef, isEmpty, remarks} — waiting for gate-out
@@ -1164,20 +1162,21 @@ function processImportRows(rawRows){
   importParsedRows=actions;
   // preserve existing mismatch choices, only init new ones
   actions.filter(a=>a.action==='mismatch'&&!(a.normXl in importMismatchMap)).forEach(a=>importMismatchMap[a.normXl]='new');
-  renderImportPreview(actions);
+  renderImportPreview(actions,dataRows.filter(r=>r&&!r.every(v=>v===null||v==='')).length);
 }
 
-function renderImportPreview(actions){
+function renderImportPreview(actions,excelRowCount){
   const newRows=actions.filter(a=>a.action==='new');
   const updateRows=actions.filter(a=>a.action==='update');
   const skipRows=actions.filter(a=>a.action==='skip');
   const mismatchRows=actions.filter(a=>a.action==='mismatch');
   const warnRows=actions.filter(a=>a.warn);
 
-  // Summary pills
+  // Summary pills — show Excel row count vs actions breakdown
   const totalImporting=newRows.length+updateRows.length+mismatchRows.length;
+  const grandTotal=newRows.length+updateRows.length+mismatchRows.length+skipRows.length;
   document.getElementById('import-summary').innerHTML=
-    `<span class="import-pill" style="background:var(--bg3);color:var(--text);font-weight:700">Total: ${totalImporting}</span>`+
+    `<span class="import-pill" style="background:var(--bg3);color:var(--text);font-weight:700">Total: ${grandTotal}</span>`+
     `<span class="import-pill import-pill-new">✚ ${newRows.length} new</span>`+
     `<span class="import-pill import-pill-update">↑ ${updateRows.length} updates</span>`+
     `<span class="import-pill import-pill-skip">— ${skipRows.length} skipped</span>`+
