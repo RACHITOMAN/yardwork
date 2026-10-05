@@ -913,15 +913,16 @@ function parseExcelDate(v){
   return null;
 }
 
-// Map TYPE OF WORK column → op ('unload' | 'cross') + loaded flag
+// Map TYPE OF WORK column → op ('unload' | 'cross') + loaded flag + isEmpty flag
 // Handles both old format (OFFLOADING/LOADING) and new format (UNLOADING/LOADING)
 function mapOpType(typeOfWork){
   const t=String(typeOfWork||'').toUpperCase().trim();
-  if(t.includes('CROSS LOAD')||t.includes('CROSS STUFF'))return{op:'cross',loaded:true};
+  const isEmpty=t.includes('EMPTY');
+  if(t.includes('CROSS LOAD')||t.includes('CROSS STUFF'))return{op:'cross',loaded:true,isEmpty};
   // Gate-in: OFFLOADING, UNLOADING, EMPTY UNLOADING, STORAGE, EMPTY CONTAINER OFFLOAD
-  if(t.includes('UNLOAD')||t.includes('OFFLOAD')||t.includes('STORAGE'))return{op:'unload',loaded:false};
+  if(t.includes('UNLOAD')||t.includes('OFFLOAD')||t.includes('STORAGE'))return{op:'unload',loaded:false,isEmpty};
   // Gate-out: LOADING (but not cross/offload/unload)
-  if(t.includes('LOAD')&&!t.includes('UNLOAD')&&!t.includes('OFFLOAD')&&!t.includes('CROSS'))return{op:'unload',loaded:true};
+  if(t.includes('LOAD')&&!t.includes('UNLOAD')&&!t.includes('OFFLOAD')&&!t.includes('CROSS'))return{op:'unload',loaded:true,isEmpty};
   return null; // unknown — skip row
 }
 
@@ -977,7 +978,7 @@ function processImportRows(rawRows){
   }
 
   // Build an ordered list of move events from the Excel rows
-  const moveEvents=[]; // {type:'in'|'out'|'cross', cnum, rawCnum, date, clientName, salesRef}
+  const moveEvents=[]; // {type:'in'|'out'|'cross', cnum, rawCnum, date, clientName, salesRef, isEmpty, remarks}
   for(const row of dataRows){
     if(!row||row.every(v=>v===null||v===''))continue;
     const rawCnum=String(row[colCnum]||'').trim();
@@ -990,43 +991,63 @@ function processImportRows(rawRows){
     const salesRef=String(row[colRef]||'').trim();
     const mapped=mapOpType(typeOfWork);
     if(!mapped)continue;
+    // Build remarks: prepend EMPTY if applicable, then append column F value
+    const remarksParts=[];
+    if(mapped.isEmpty)remarksParts.push('EMPTY');
+    if(salesRef)remarksParts.push(salesRef);
+    const remarks=remarksParts.join(' | ');
     if(mapped.op==='cross'){
-      moveEvents.push({type:'cross',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
+      moveEvents.push({type:'cross',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:mapped.isEmpty,remarks});
     }else if(!mapped.loaded){
-      moveEvents.push({type:'in',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
+      moveEvents.push({type:'in',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:mapped.isEmpty,remarks});
     }else{
-      moveEvents.push({type:'out',cnum,rawCnum,date,clientName:clientNameVal,salesRef});
+      moveEvents.push({type:'out',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:mapped.isEmpty,remarks});
     }
   }
 
   // Pair gate-ins with gate-outs in order per container number.
   // Multiple in→out→in cycles produce multiple trip records.
+  // Key rule: if a container already exists in the DB yard AND we see in→out for it
+  // in the same Excel, the gate-out belongs to the existing DB record (standalone update)
+  // and the gate-in is a brand-new separate entry — do NOT collapse them into one trip.
+  const existingYardNorms=new Set(DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded).map(e=>normCnum(e.containerNo)));
   const trips=[]; // [{cnum, rawCnum, inDate, outDate|null, clientName, salesRef}]
-  const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef}]
-  const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef} — waiting for gate-out
+  const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef, isEmpty, remarks}]
+  const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef, isEmpty, remarks} — waiting for gate-out
   for(const ev of moveEvents){
     if(ev.type==='cross'){
       crossList.push(ev);
     }else if(ev.type==='in'){
       // If already have an open gate-in for this container, close it without gate-out first
       if(pendingIn[ev.cnum]){
-        trips.push({cnum:ev.cnum,rawCnum:pendingIn[ev.cnum].rawCnum,inDate:pendingIn[ev.cnum].date,outDate:null,clientName:pendingIn[ev.cnum].clientName,salesRef:pendingIn[ev.cnum].salesRef});
+        const p=pendingIn[ev.cnum];
+        trips.push({cnum:ev.cnum,rawCnum:p.rawCnum,inDate:p.date,outDate:null,clientName:p.clientName,salesRef:p.salesRef,isEmpty:p.isEmpty,inRemarks:p.remarks,outRemarks:null});
       }
-      pendingIn[ev.cnum]={date:ev.date,rawCnum:ev.rawCnum,clientName:ev.clientName,salesRef:ev.salesRef};
+      pendingIn[ev.cnum]={date:ev.date,rawCnum:ev.rawCnum,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,remarks:ev.remarks};
     }else if(ev.type==='out'){
       if(pendingIn[ev.cnum]){
-        // Pair with open gate-in
-        trips.push({cnum:ev.cnum,rawCnum:pendingIn[ev.cnum].rawCnum,inDate:pendingIn[ev.cnum].date,outDate:ev.date,clientName:pendingIn[ev.cnum].clientName,salesRef:pendingIn[ev.cnum].salesRef});
-        delete pendingIn[ev.cnum];
+        // Container has a pending gate-in in this file.
+        // If the container is ALSO already in the DB yard, the gate-out belongs to that
+        // existing DB record — emit it as a standalone update and keep the pending gate-in
+        // as a separate new entry (don't pair them).
+        if(existingYardNorms.has(ev.cnum)){
+          trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
+          // pendingIn stays open — will become a new gate-in record
+        }else{
+          // Not in DB yard — pair the in→out as a single completed trip
+          const p=pendingIn[ev.cnum];
+          trips.push({cnum:ev.cnum,rawCnum:p.rawCnum,inDate:p.date,outDate:ev.date,clientName:p.clientName,salesRef:p.salesRef,isEmpty:p.isEmpty,inRemarks:p.remarks,outRemarks:ev.remarks,outIsEmpty:ev.isEmpty});
+          delete pendingIn[ev.cnum];
+        }
       }else{
         // Gate-out with no gate-in in this Excel → standalone gate-out (update DB)
-        trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef});
+        trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
       }
     }
   }
   // Any remaining open gate-ins with no gate-out
   for(const[cnum,info]of Object.entries(pendingIn)){
-    trips.push({cnum,rawCnum:info.rawCnum,inDate:info.date,outDate:null,clientName:info.clientName,salesRef:info.salesRef});
+    trips.push({cnum,rawCnum:info.rawCnum,inDate:info.date,outDate:null,clientName:info.clientName,salesRef:info.salesRef,isEmpty:info.isEmpty,inRemarks:info.remarks,outRemarks:null});
   }
 
   // Now decide action per trip:
@@ -1052,9 +1073,27 @@ function processImportRows(rawRows){
 
   function editDist(a,b){const m=a.length,n=b.length;const d=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i===0?j:j===0?i:0));for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=a[i-1]===b[j-1]?d[i-1][j-1]:1+Math.min(d[i-1][j],d[i][j-1],d[i-1][j-1]);return d[m][n];}
 
+  // Helper: detect EMPTY contradiction between gate-in and gate-out
+  // Returns a warning string if mismatch, null if ok
+  function emptyContradiction(inEmpty,outEmpty){
+    if(inEmpty===undefined||outEmpty===undefined)return null;
+    if(inEmpty&&!outEmpty)return'Gate-in is EMPTY but gate-out is LOADED';
+    if(!inEmpty&&outEmpty)return'Gate-in is LOADED but gate-out is EMPTY';
+    return null;
+  }
+
   for(const trip of trips){
-    const{cnum,rawCnum,inDate,outDate,clientName:cName,salesRef}=trip;
+    const{cnum,rawCnum,inDate,outDate,clientName:cName,salesRef,isEmpty,inRemarks,outRemarks,outIsEmpty}=trip;
     const clientId=findClientId(cName);
+    // Combine remarks: prefer inRemarks for gate-in actions, outRemarks for gate-out
+    // For a paired trip, join both if different
+    function buildRemarks(r1,r2){
+      const parts=[r1,r2].filter(Boolean);
+      if(parts.length===0)return'';
+      if(parts.length===1)return parts[0];
+      if(parts[0]===parts[1])return parts[0];
+      return parts.join(' | ');
+    }
 
     if(inDate){
       // This trip has a gate-in
@@ -1062,7 +1101,11 @@ function processImportRows(rawRows){
       if(existing){
         // Already in yard — skip the gate-in, but apply gate-out if present
         if(outDate){
-          actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:cName});
+          // Check contradiction: does existing DB record's remarks say EMPTY vs. outIsEmpty?
+          const dbIsEmpty=!!(existing.remarks&&existing.remarks.includes('EMPTY'));
+          const contradiction=emptyContradiction(dbIsEmpty,outIsEmpty!==undefined?outIsEmpty:isEmpty);
+          const remarks=outRemarks||'';
+          actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:cName,remarks,warn:!!contradiction,warnMsg:contradiction||''});
           // Remove from existingActive so a subsequent gate-in for same container is treated as new
           const idx=existingActive.findIndex(e=>e.id===existing.id);
           if(idx>=0)existingActive.splice(idx,1);
@@ -1074,14 +1117,16 @@ function processImportRows(rawRows){
         const prefix=cnum.slice(0,4);
         const digits=cnum.slice(4);
         const near=existingActive.find(e=>{const nc=normCnum(e.containerNo);return nc.slice(0,4)===prefix&&nc!==cnum&&editDist(nc.slice(4),digits)<=2;});
+        const contradiction=outDate?emptyContradiction(isEmpty,outIsEmpty):null;
+        const remarks=buildRemarks(inRemarks,outRemarks);
         if(near){
-          actions.push({action:'mismatch',xlCnum:rawCnum,normXl:cnum,dbCnum:near.containerNo,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate});
+          actions.push({action:'mismatch',xlCnum:rawCnum,normXl:cnum,dbCnum:near.containerNo,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,remarks,warn:!!contradiction,warnMsg:contradiction||''});
         }else{
-          actions.push({action:'new',cnum,rawCnum,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,op:'unload'});
+          actions.push({action:'new',cnum,rawCnum,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,op:'unload',remarks,warn:!!contradiction,warnMsg:contradiction||''});
           if(!outDate){
             // Insert into existingActive so a subsequent gate-out for same container can match it
-            newlyInserted.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null});
-            existingActive.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null});
+            newlyInserted.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
+            existingActive.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
           }
         }
       }
@@ -1089,7 +1134,10 @@ function processImportRows(rawRows){
       // Standalone gate-out (no gate-in in this Excel)
       const existing=findExistingByNorm(cnum);
       if(existing){
-        actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:clientName(existing.clientId)});
+        const dbIsEmpty=!!(existing.remarks&&existing.remarks.includes('EMPTY'));
+        const contradiction=emptyContradiction(dbIsEmpty,isEmpty);
+        const remarks=outRemarks||'';
+        actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:clientName(existing.clientId),remarks,warn:!!contradiction,warnMsg:contradiction||''});
         const idx=existingActive.findIndex(e=>e.id===existing.id);
         if(idx>=0)existingActive.splice(idx,1);
       }else{
@@ -1106,7 +1154,7 @@ function processImportRows(rawRows){
     if(dupCross){
       actions.push({action:'skip',reason:'cross-load already exists',cnum:cr.rawCnum,clientName:cr.clientName});
     }else{
-      actions.push({action:'new',op:'cross',cnum:cr.cnum,rawCnum:cr.rawCnum,date:cr.date,clientId,clientName:cr.clientName,salesRef:cr.salesRef,loaded:true,loadDate:cr.date});
+      actions.push({action:'new',op:'cross',cnum:cr.cnum,rawCnum:cr.rawCnum,date:cr.date,clientId,clientName:cr.clientName,salesRef:cr.salesRef,loaded:true,loadDate:cr.date,remarks:cr.remarks||''});
     }
   }
 
@@ -1122,6 +1170,7 @@ function renderImportPreview(actions){
   const updateRows=actions.filter(a=>a.action==='update');
   const skipRows=actions.filter(a=>a.action==='skip');
   const mismatchRows=actions.filter(a=>a.action==='mismatch');
+  const warnRows=actions.filter(a=>a.warn);
 
   // Summary pills
   const totalImporting=newRows.length+updateRows.length+mismatchRows.length;
@@ -1130,7 +1179,8 @@ function renderImportPreview(actions){
     `<span class="import-pill import-pill-new">✚ ${newRows.length} new</span>`+
     `<span class="import-pill import-pill-update">↑ ${updateRows.length} updates</span>`+
     `<span class="import-pill import-pill-skip">— ${skipRows.length} skipped</span>`+
-    (mismatchRows.length?`<span class="import-pill import-pill-warn">⚠ ${mismatchRows.length} mismatch(es)</span>`:'');
+    (mismatchRows.length?`<span class="import-pill import-pill-warn">⚠ ${mismatchRows.length} mismatch(es)</span>`:'')+
+    (warnRows.length?`<span class="import-pill import-pill-warn" style="background:#fef3c7;color:#92400e">⚠ ${warnRows.length} EMPTY warning(s) — confirm before import</span>`:'');
 
   // Mismatch section
   const mmsec=document.getElementById('import-mismatch-section');
@@ -1153,10 +1203,11 @@ function renderImportPreview(actions){
     mmsec.style.display='none';
   }
 
-  // Preview table
-  let html='<table><thead><tr><th>Action</th><th>Container</th><th>Type</th><th>Date</th><th>Client</th><th>Note</th></tr></thead><tbody>';
+  // Preview table — includes Remarks column
+  let html='<table><thead><tr><th>Action</th><th>Container</th><th>Type</th><th>Date</th><th>Client</th><th>Remarks</th><th>Note</th></tr></thead><tbody>';
   actions.forEach(a=>{
-    let actionLabel='',rowClass='',typeLabel='',note='';
+    let actionLabel='',rowClass='',typeLabel='',note='',remarksHtml='';
+    const hasWarn=a.warn&&a.warnMsg;
     if(a.action==='new'){
       actionLabel='<span class="badge badge-in">New</span>';
       rowClass='import-row-new';
@@ -1178,7 +1229,15 @@ function renderImportPreview(actions){
       typeLabel='Unloading';
       note=`Similar to: ${esc(a.dbCnum)}`+(a.clientId?'':` &nbsp;<button class="btn btn-sm btn-client" data-cname="${esc(a.clientName)}" onclick="importAddClient(this.dataset.cname)">+ Add Client</button>`);
     }
-    html+=`<tr class="${rowClass}"><td>${actionLabel}</td><td>${esc(a.rawCnum||a.cnum)}</td><td>${typeLabel}</td><td>${fmt(a.date||a.loadDate)}</td><td>${esc(a.clientName||'–')}</td><td style="color:var(--text2)">${note}</td></tr>`;
+    // Remarks cell: show value + EMPTY warning inline
+    if(a.remarks){remarksHtml=`<span style="color:var(--text2)">${esc(a.remarks)}</span>`;}
+    if(hasWarn){
+      rowClass=(rowClass?rowClass+' ':'')+'import-row-warn';
+      remarksHtml+=(remarksHtml?' ':'')+'<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;font-size:11px;white-space:nowrap">⚠ '+esc(a.warnMsg)+'</span>';
+    }
+    // Highlight warning rows yellow
+    const rowStyle=hasWarn?'background:#fffbeb;':''
+    html+=`<tr class="${rowClass}" style="${rowStyle}"><td>${actionLabel}</td><td>${esc(a.rawCnum||a.cnum)}</td><td>${typeLabel}</td><td>${fmt(a.date||a.loadDate)}</td><td>${esc(a.clientName||'–')}</td><td>${remarksHtml}</td><td style="color:var(--text2)">${note}</td></tr>`;
   });
   html+='</tbody></table>';
   document.getElementById('import-preview-table').innerHTML=html;
@@ -1214,6 +1273,16 @@ async function importAddClient(name){
 async function commitImport(){
   const actions=importParsedRows;
   if(!actions.length){closeModal('modal-import');return}
+
+  // If any rows have EMPTY contradictions, require confirmation before proceeding
+  const warnRows=actions.filter(a=>a.warn&&a.action!=='skip');
+  if(warnRows.length){
+    const msgs=warnRows.map(a=>`• ${a.rawCnum||a.cnum}: ${a.warnMsg}`).join('\n');
+    if(!confirm(`⚠ EMPTY status warning(s) detected:\n\n${msgs}\n\nProceed with import anyway?`)){
+      return; // user cancelled — stay on preview
+    }
+  }
+
   setSyncStatus('saving');
   let inserted=0,updated=0,errors=0;
   const undoInsertedIds=[];
@@ -1226,7 +1295,7 @@ async function commitImport(){
       const isCross=a.op==='cross';
       const cnum=normCnum(a.cnum);
       const clientId=a.clientId||null;
-      const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
+      const row={container_no:cnum,op:isCross?'cross':'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:a.remarks||'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
       const{data,error}=await sb.from('transactions').insert(row).select().single();
       if(error){errors++;continue}
       DB.unshift(rowToEntry(data));undoInsertedIds.push(data.id);inserted++;
@@ -1236,9 +1305,17 @@ async function commitImport(){
       const existing=DB.find(x=>x.id===a.existingId);
       const prevLoaded=existing?existing.loaded:false;
       const prevLoadDate=existing?existing.loadDate:null;
-      const{error}=await sb.from('transactions').update({loaded:true,load_date:a.loadDate}).eq('id',a.existingId);
+      const prevRemarks=existing?existing.remarks||'':''
+      // Merge remarks: keep existing, append new if different
+      const newRemarks=a.remarks||'';
+      const mergedRemarks=prevRemarks&&newRemarks&&prevRemarks!==newRemarks
+        ?prevRemarks+' | '+newRemarks
+        :newRemarks||prevRemarks;
+      const updatePayload={loaded:true,load_date:a.loadDate};
+      if(mergedRemarks)updatePayload.remarks=mergedRemarks;
+      const{error}=await sb.from('transactions').update(updatePayload).eq('id',a.existingId);
       if(error){errors++;continue}
-      if(existing){existing.loaded=true;existing.loadDate=a.loadDate}
+      if(existing){existing.loaded=true;existing.loadDate=a.loadDate;if(mergedRemarks)existing.remarks=mergedRemarks;}
       undoUpdatedIds.push({id:a.existingId,prevLoaded,prevLoadDate});
       updated++;
     }
@@ -1250,16 +1327,24 @@ async function commitImport(){
         const existing=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&normCnum(e.containerNo)===normCnum(a.dbCnum));
         if(existing){
           const prevLoaded=existing.loaded;const prevLoadDate=existing.loadDate;
-          const{error}=await sb.from('transactions').update({loaded:a.loaded,load_date:a.loaded?a.loadDate||a.date:null}).eq('id',existing.id);
+          const prevRemarks=existing.remarks||'';
+          const newRemarks=a.remarks||'';
+          const mergedRemarks=prevRemarks&&newRemarks&&prevRemarks!==newRemarks
+            ?prevRemarks+' | '+newRemarks
+            :newRemarks||prevRemarks;
+          const updatePayload={loaded:a.loaded,load_date:a.loaded?a.loadDate||a.date:null};
+          if(mergedRemarks)updatePayload.remarks=mergedRemarks;
+          const{error}=await sb.from('transactions').update(updatePayload).eq('id',existing.id);
           if(error){errors++;continue}
           existing.loaded=a.loaded;existing.loadDate=a.loaded?a.loadDate||a.date:null;
+          if(mergedRemarks)existing.remarks=mergedRemarks;
           undoUpdatedIds.push({id:existing.id,prevLoaded,prevLoadDate});
           updated++;
         }
       }else{
         // insert as brand new container
         const clientId=a.clientId||null;
-        const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
+        const row={container_no:normCnum(a.xlCnum),op:'unload',unload_date:a.date,loaded:a.loaded||false,load_date:a.loaded?a.loadDate||a.date:null,client_id:clientId,sales_ref:a.salesRef||null,remarks:a.remarks||'',invoice_no:null,invoiced:false,paid_date:null,deleted:false,created_by:activeUser||''};
         const{data,error}=await sb.from('transactions').insert(row).select().single();
         if(error){errors++;continue}
         DB.unshift(rowToEntry(data));undoInsertedIds.push(data.id);inserted++;
