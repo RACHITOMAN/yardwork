@@ -1011,6 +1011,8 @@ function processImportRows(rawRows){
   // in the same Excel, the gate-out belongs to the existing DB record (standalone update)
   // and the gate-in is a brand-new separate entry — do NOT collapse them into one trip.
   const existingYardNorms=new Set(DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded).map(e=>normCnum(e.containerNo)));
+  console.log('[Import] existingYardNorms ('+existingYardNorms.size+'):',[...existingYardNorms].join(', '));
+  console.log('[Import] moveEvents:',moveEvents.map(e=>e.type+':'+e.cnum).join(', '));
   const trips=[]; // [{cnum, rawCnum, inDate, outDate|null, clientName, salesRef}]
   const crossList=[]; // [{cnum, rawCnum, date, clientName, salesRef, isEmpty, remarks}]
   const pendingIn={}; // cnum → {date, rawCnum, clientName, salesRef, isEmpty, remarks} — waiting for gate-out
@@ -1110,7 +1112,7 @@ function processImportRows(rawRows){
           const idx=existingActive.findIndex(e=>e.id===existing.id);
           if(idx>=0)existingActive.splice(idx,1);
         }else{
-          actions.push({action:'skip',reason:'already in yard',cnum:rawCnum,clientName:cName});
+          actions.push({action:'skip',reason:'already in yard (gate-in duplicate)',cnum:rawCnum,clientName:cName});
         }
       }else{
         // New gate-in — check for typo mismatch
@@ -1141,7 +1143,7 @@ function processImportRows(rawRows){
         const idx=existingActive.findIndex(e=>e.id===existing.id);
         if(idx>=0)existingActive.splice(idx,1);
       }else{
-        actions.push({action:'skip',reason:'gate-out but not in yard',cnum:rawCnum,clientName:'–'});
+        actions.push({action:'skip',reason:'not in yard (gate-out only)',cnum:rawCnum,clientName:cName||'–'});
       }
     }
   }
