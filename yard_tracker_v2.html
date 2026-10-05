@@ -332,6 +332,15 @@ body.client-portal .global-client-filter{display:none!important}
       </div>
       <div style="font-weight:600;margin-bottom:6px">Preview</div>
       <div id="import-preview-table" style="max-height:320px;overflow-y:auto;font-size:12px"></div>
+      <!-- Inline EMPTY warning confirmation — shown instead of browser confirm() -->
+      <div id="import-warn-confirm" style="display:none;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px">
+        <div style="font-weight:600;color:#92400e;margin-bottom:6px">⚠ EMPTY status warning(s) — confirm before importing:</div>
+        <div id="import-warn-list" style="color:#78350f;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="commitImportConfirmed()">Proceed with import</button>
+          <button class="btn" onclick="document.getElementById('import-warn-confirm').style.display='none';var b=document.getElementById('import-commit-btn');if(b)b.disabled=false;">Cancel</button>
+        </div>
+      </div>
       <div class="modal-btns" style="margin-top:12px">
         <button class="btn" onclick="closeModal('modal-import')">Cancel</button>
         <button class="btn" onclick="showImportPick()">← Back</button>
@@ -1060,6 +1069,12 @@ function processImportRows(rawRows){
   // We clone this and update it as we process, so a container offloaded in this
   // Excel and then loaded again is correctly handled for the 2nd offloading.
   const existingActive=DB.filter(e=>!e.deleted&&e.op==='unload'&&!e.loaded).map(e=>({...e}));
+
+  // Duplicate fingerprint set: "normCnum|unloadDate" for every non-deleted DB record.
+  // Used to catch re-importing the same row (same container + same gate-in date already in DB).
+  const dbFingerprints=new Set(
+    DB.filter(e=>!e.deleted).map(e=>normCnum(e.containerNo)+'|'+(e.unloadDate||''))
+  );
   const newlyInserted=[]; // track containers we insert during this processing pass
 
   function findClientId(nameFromExcel){
@@ -1106,8 +1121,11 @@ function processImportRows(rawRows){
         // Already in yard — skip the gate-in, but apply gate-out if present
         if(outDate){
           // Check contradiction: does existing DB record's remarks say EMPTY vs. outIsEmpty?
-          const dbIsEmpty=!!(existing.remarks&&existing.remarks.includes('EMPTY'));
-          const contradiction=emptyContradiction(dbIsEmpty,outIsEmpty!==undefined?outIsEmpty:isEmpty);
+          // Only warn if DB had explicit EMPTY context — blank remarks mean unknown, not LOADED.
+          const dbRemarks2=existing.remarks||'';
+          const dbHasEmptyContext2=dbRemarks2.includes('EMPTY');
+          const dbIsEmpty=dbHasEmptyContext2;
+          const contradiction=dbHasEmptyContext2?emptyContradiction(dbIsEmpty,outIsEmpty!==undefined?outIsEmpty:isEmpty):null;
           const remarks=outRemarks||'';
           actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:cName,remarks,warn:!!contradiction,warnMsg:contradiction||''});
           // Remove from existingActive so a subsequent gate-in for same container is treated as new
@@ -1126,11 +1144,18 @@ function processImportRows(rawRows){
         if(near){
           actions.push({action:'mismatch',xlCnum:rawCnum,normXl:cnum,dbCnum:near.containerNo,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,remarks,warn:!!contradiction,warnMsg:contradiction||''});
         }else{
-          actions.push({action:'new',cnum,rawCnum,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,op:'unload',remarks,warn:!!contradiction,warnMsg:contradiction||''});
-          if(!outDate){
-            // Insert into existingActive so a subsequent gate-out for same container can match it
-            newlyInserted.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
-            existingActive.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
+          // Duplicate check: same container + same gate-in date already in DB?
+          const fp=cnum+'|'+(inDate||'');
+          if(dbFingerprints.has(fp)){
+            actions.push({action:'skip',reason:'duplicate — already imported (same container + date)',cnum:rawCnum,clientName:cName});
+          }else{
+            actions.push({action:'new',cnum,rawCnum,date:inDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:!!outDate,op:'unload',remarks,warn:!!contradiction,warnMsg:contradiction||''});
+            dbFingerprints.add(fp); // prevent a 2nd row in same Excel from double-inserting
+            if(!outDate){
+              // Insert into existingActive so a subsequent gate-out for same container can match it
+              newlyInserted.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
+              existingActive.push({id:'__pending_'+cnum+'_'+inDate,containerNo:cnum,loaded:false,loadDate:null,remarks});
+            }
           }
         }
       }
@@ -1138,8 +1163,13 @@ function processImportRows(rawRows){
       // Standalone gate-out (no gate-in in this Excel)
       const existing=findExistingByNorm(cnum);
       if(existing){
-        const dbIsEmpty=!!(existing.remarks&&existing.remarks.includes('EMPTY'));
-        const contradiction=emptyContradiction(dbIsEmpty,isEmpty);
+        // Only check EMPTY contradiction if the DB record has existing remarks with EMPTY context.
+        // If DB remarks are empty/blank, we have no prior EMPTY status to contradict — skip warning.
+        const dbRemarks=existing.remarks||'';
+        const dbHasEmptyContext=dbRemarks.includes('EMPTY');
+        const dbIsEmpty=dbHasEmptyContext; // true only if DB explicitly mentions EMPTY
+        // Only warn if DB had EMPTY context AND current gate-out disagrees (or vice versa)
+        const contradiction=dbHasEmptyContext?emptyContradiction(dbIsEmpty,isEmpty):null;
         const remarks=outRemarks||'';
         actions.push({action:'update',existingId:existing.id,loadDate:outDate,cnum:existing.containerNo,clientName:clientName(existing.clientId),remarks,warn:!!contradiction,warnMsg:contradiction||''});
         const idx=existingActive.findIndex(e=>e.id===existing.id);
@@ -1147,7 +1177,13 @@ function processImportRows(rawRows){
       }else{
         // Not in DB yard — came from a split (UNLOADING+LOADING same Excel).
         // Import as a new completed trip: gate-in = gate-out date (same day turnaround).
-        actions.push({action:'new',cnum,rawCnum,date:outDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:true,op:'unload',remarks:outRemarks||''});
+        const fp2=cnum+'|'+(outDate||'');
+        if(dbFingerprints.has(fp2)){
+          actions.push({action:'skip',reason:'duplicate — already imported (same container + date)',cnum:rawCnum,clientName:cName});
+        }else{
+          actions.push({action:'new',cnum,rawCnum,date:outDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:true,op:'unload',remarks:outRemarks||''});
+          dbFingerprints.add(fp2);
+        }
       }
     }
   }
@@ -1281,15 +1317,33 @@ async function commitImport(){
   const actions=importParsedRows;
   if(!actions.length){closeModal('modal-import');return}
 
-  // If any rows have EMPTY contradictions, require confirmation before proceeding
+  // Disable button immediately to prevent double-submit
+  const commitBtn=document.getElementById('import-commit-btn');
+  if(commitBtn)commitBtn.disabled=true;
+
+  // If any rows have EMPTY contradictions, show inline warning panel instead of browser confirm()
   const warnRows=actions.filter(a=>a.warn&&a.action!=='skip');
   if(warnRows.length){
-    const msgs=warnRows.map(a=>`• ${a.rawCnum||a.cnum}: ${a.warnMsg}`).join('\n');
-    if(!confirm(`⚠ EMPTY status warning(s) detected:\n\n${msgs}\n\nProceed with import anyway?`)){
-      return; // user cancelled — stay on preview
-    }
+    const list=document.getElementById('import-warn-list');
+    const panel=document.getElementById('import-warn-confirm');
+    list.innerHTML=warnRows.map(a=>`<div>• ${esc(a.rawCnum||a.cnum)}: ${esc(a.warnMsg)}</div>`).join('');
+    panel.style.display='';
+    panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return; // wait for user to click "Proceed" or "Cancel" in the panel
   }
 
+  await commitImportConfirmed();
+}
+
+async function commitImportConfirmed(){
+  document.getElementById('import-warn-confirm').style.display='none';
+  // Disable commit button to prevent double-submit
+  const commitBtn=document.getElementById('import-commit-btn');
+  if(commitBtn)commitBtn.disabled=true;
+  const actions=importParsedRows;
+  // Guard: if already cleared (double-call), bail out
+  if(!actions||!actions.length){closeModal('modal-import');return}
+  importParsedRows=[]; // clear immediately so any re-entry is a no-op
   setSyncStatus('saving');
   let inserted=0,updated=0,errors=0;
   const undoInsertedIds=[];
