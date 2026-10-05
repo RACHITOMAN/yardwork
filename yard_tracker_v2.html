@@ -1145,7 +1145,9 @@ function processImportRows(rawRows){
         const idx=existingActive.findIndex(e=>e.id===existing.id);
         if(idx>=0)existingActive.splice(idx,1);
       }else{
-        actions.push({action:'skip',reason:'not in yard (gate-out only)',cnum:rawCnum,clientName:cName||'–'});
+        // Not in DB yard — came from a split (UNLOADING+LOADING same Excel).
+        // Import as a new completed trip: gate-in = gate-out date (same day turnaround).
+        actions.push({action:'new',cnum,rawCnum,date:outDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:true,op:'unload',remarks:outRemarks||''});
       }
     }
   }
