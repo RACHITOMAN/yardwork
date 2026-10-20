@@ -1795,8 +1795,9 @@ function renderYard(){
   const inYardIds=new Set(inYard.map(e=>e.id));
   selectedLoad.forEach(id=>{if(!inYardIds.has(id))selectedLoad.delete(id)});
   inYard=applySortEntries(inYard,yardSort);
+  const clearSelBtn=selectedLoad.size>0?`<button class="btn" onclick="selectedLoad=new Set();renderYard()" style="color:var(--danger)">Clear Selection (${selectedLoad.size})</button>`:'';
   document.getElementById('tab-yard').innerHTML=
-    `<div class="filter-bar"><button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button></div>`+
+    `<div class="filter-bar"><button id="bulk-load-btn" class="btn btn-primary" onclick="openBulkLoadModal()">Mark Loaded (${selectedLoad.size})</button>${clearSelBtn}</div>`+
     yardTableWrap(inYard.map(e=>yardRow(e)).join(''));
 }
 
