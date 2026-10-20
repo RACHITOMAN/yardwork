@@ -1476,7 +1476,18 @@ async function exportBillingSheet(cid){
   if(!data.length){alert('No ready-to-invoice containers.');return}
   const label=cidToUse?clientName(cidToUse):'All Clients';
   let tS=0,tOp=0,tTotal=0;
-  const rows=data.map(e=>{const r=calcTotal(e);tS+=r.storageCost;tOp+=r.opCost;tTotal+=r.total;return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':r.days,'Storage (RO)':+r.storageCost.toFixed(3),'Op Charge (RO)':+r.opCost.toFixed(3),'Total (RO)':+r.total.toFixed(3),'Remarks':e.op==='cross'?'Cross Load':(e.remarks||'')}});
+  const rows=data.map(e=>{
+    const r=calcTotal(e);tS+=r.storageCost;tOp+=r.opCost;tTotal+=r.total;
+    // Build combined remarks: start with stored remarks, prepend Cross Load if applicable
+    const parts=[];
+    if(e.op==='cross')parts.push('Cross Load');
+    if(e.remarks&&!parts.includes(e.remarks)){
+      // remarks may already contain Cross Load — avoid duplicating
+      const rem=e.remarks.replace(/^Cross Load\s*\|\s*/i,'').replace(/\s*\|\s*Cross Load$/i,'').trim();
+      if(rem)parts.push(rem);
+    }
+    return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':r.days,'Storage (RO)':+r.storageCost.toFixed(3),'Op Charge (RO)':+r.opCost.toFixed(3),'Total (RO)':+r.total.toFixed(3),'Remarks':parts.join(' | ')};
+  });
   rows.push({});rows.push({'Container No':'TOTAL','Storage (RO)':+tS.toFixed(3),'Op Charge (RO)':+tOp.toFixed(3),'Total (RO)':+tTotal.toFixed(3)});
   const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:16},{wch:16},{wch:14},{wch:20}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Billing');
@@ -1663,11 +1674,26 @@ function thSort(state,col,label,opts={}){
   return`<th style="${style}" onclick="${opts.fn||'sortAll'}('${col}')">${label} <span style="font-size:10px">${arrow}</span></th>`;
 }
 
-function tableWrap(rows,tfoot){
+function toggleSelectAllInvoice(checked,visibleIds){
+  if(checked){visibleIds.forEach(id=>selectedInvoices.add(id));}
+  else{visibleIds.forEach(id=>selectedInvoices.delete(id));}
+  document.querySelectorAll('.mark-paid-count-btn').forEach(b=>b.textContent=`Mark Paid (${selectedInvoices.size})`);
+  // Re-check all visible row checkboxes to match
+  visibleIds.forEach(id=>{
+    const cb=document.querySelector(`input[onchange*="toggleInvoiceSelection('${id}'"]`);
+    if(cb)cb.checked=checked;
+  });
+}
+
+function tableWrap(rows,tfoot,visibleIds){
   const s=allSort;
+  const allChecked=visibleIds&&visibleIds.length>0&&visibleIds.every(id=>selectedInvoices.has(id));
+  // Store ids on a temp window variable to avoid inline JSON quoting issues
+  const tmpKey='_tblIds_'+Math.random().toString(36).slice(2);
+  window[tmpKey]=visibleIds||[];
   return`<div class="overflow-x"><table>
     <thead><tr>
-      <th style="width:40px"></th>
+      <th style="width:40px"><input type="checkbox" title="Select all" ${allChecked?'checked':''} onchange="toggleSelectAllInvoice(this.checked,window['${tmpKey}'])"></th>
       ${thSort(s,'containerNo','Container no.',{fn:'sortAll'})}
       ${thSort(s,'clientId','Client',{fn:'sortAll'})}
       ${thSort(s,'unloadDate','Gate In',{fn:'sortAll'})}
@@ -1779,7 +1805,7 @@ function renderAllTable(){
   if(inv==='1')data=data.filter(e=>e.invoiced);
   if(cl)data=data.filter(e=>e.clientId===cl);
   data=applySortEntries(data,allSort);
-  document.getElementById('all-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''));
+  document.getElementById('all-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),null,data.map(e=>e.id));
 }
 
 function renderPending(){
@@ -1799,7 +1825,7 @@ function renderPendingFiltered(){
   data.sort((a,b)=>(a.unloadDate||'').localeCompare(b.unloadDate||''));
   const total=data.reduce((s,e)=>s+calcTotal(e).total,0);
   const tfoot=data.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Pending total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-  document.getElementById('pending-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot);
+  document.getElementById('pending-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot,data.map(e=>e.id));
 }
 
 function renderInvoiced(){
@@ -1817,7 +1843,7 @@ function renderInvoicedTable(){
   data.sort((a,b)=>(b.invoiceNo||'').localeCompare(a.invoiceNo||''));
   const total=data.reduce((s,e)=>s+calcTotal(e).total,0);
   const tfoot=data.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-  document.getElementById('invoiced-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot);
+  document.getElementById('invoiced-table').innerHTML=tableWrap(data.map(e=>entryRow(e)).join(''),tfoot,data.map(e=>e.id));
 }
 
 function renderPayments(){
@@ -1987,17 +2013,17 @@ function renderClientDetail(cid,tab){
   }else if(tab==='alltx'){
     const total=allRows.reduce((s,e)=>s+calcTotal(e).total,0);
     const tfoot=allRows.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button></div>`+tableWrap(allRows.map(e=>entryRow(e)).join(''),tfoot);
+    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button></div>`+tableWrap(allRows.map(e=>entryRow(e)).join(''),tfoot,allRows.map(e=>e.id));
   }else if(tab==='pending'){
     const sorted=[...pendingRows].sort((a,b)=>(a.unloadDate||'').localeCompare(b.unloadDate||''));
     const total=sorted.reduce((s,e)=>s+calcTotal(e).total,0);
     const tfoot=sorted.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice</button><button class="btn btn-bulk btn-sm" onclick="exportClientBillingExcel('${cid}')">📊 Billing XLS</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot):'<div class="empty">No containers pending invoice.</div>');
+    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="bulkInvoiceSelected()">Assign Invoice</button><button class="btn btn-bulk btn-sm" onclick="exportClientBillingExcel('${cid}')">📊 Billing XLS</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot,sorted.map(e=>e.id)):'<div class="empty">No containers pending invoice.</div>');
   }else if(tab==='invoiced'){
     const sorted=[...invoicedRows].sort((a,b)=>(b.invoiceNo||'').localeCompare(a.invoiceNo||''));
     const total=sorted.reduce((s,e)=>s+calcTotal(e).total,0);
     const tfoot=sorted.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot):'<div class="empty">No invoiced containers.</div>');
+    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot,sorted.map(e=>e.id)):'<div class="empty">No invoiced containers.</div>');
   }else if(tab==='ppay'){
     const groupArr=Object.entries(unpaidInvGroups).map(([inv,entries])=>({inv,entries,total:entries.reduce((s,e)=>s+calcTotal(e).total,0)})).sort((a,b)=>String(b.inv).localeCompare(String(a.inv)));
     const grandTotal=groupArr.reduce((s,g)=>s+g.total,0);
