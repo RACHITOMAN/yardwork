@@ -716,6 +716,30 @@ async function savePaidDate(){
   if(window._afterPaid){window._afterPaid();window._afterPaid=null}
 }
 
+async function bulkUnmarkPaid(){
+  if(!selectedInvoices.size){alert('Select at least one container.');return}
+  const ids=[...selectedInvoices].filter(id=>{const e=DB.find(x=>x.id===id);return e&&e.paidDate});
+  if(!ids.length){alert('None of the selected containers are marked as paid.');return}
+  if(!confirm(`Remove paid status from ${ids.length} container(s)?`))return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('transactions').update({paid_date:null}).in('id',ids);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  ids.forEach(id=>{const e=DB.find(x=>x.id===id);if(e)e.paidDate=''});
+  selectedInvoices.clear();setSyncStatus('saved');render();
+}
+
+async function bulkUnmarkInvoice(){
+  if(!selectedInvoices.size){alert('Select at least one container.');return}
+  const ids=[...selectedInvoices].filter(id=>{const e=DB.find(x=>x.id===id);return e&&e.invoiced});
+  if(!ids.length){alert('None of the selected containers are invoiced.');return}
+  if(!confirm(`Remove invoice assignment from ${ids.length} container(s)?`))return;
+  setSyncStatus('saving');
+  const{error}=await sb.from('transactions').update({invoiced:false,invoice_no:null,paid_date:null}).in('id',ids);
+  if(error){setSyncStatus('error');alert('Error: '+error.message);return}
+  ids.forEach(id=>{const e=DB.find(x=>x.id===id);if(e){e.invoiced=false;e.invoiceNo=null;e.paidDate=''}});
+  selectedInvoices.clear();setSyncStatus('saved');render();
+}
+
 function toggleGroupSelect(invoiceNo,checked){
   const ids=DB.filter(e=>!e.deleted&&e.invoiced&&String(e.invoiceNo)===String(invoiceNo)).map(e=>e.id);
   ids.forEach(id=>checked?selectedInvoices.add(id):selectedInvoices.delete(id));
@@ -1781,6 +1805,8 @@ function renderAll(){
   document.getElementById('tab-all').innerHTML=`<div class="filter-bar">
     <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice</button>
     <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkPaid()">Unmark Paid</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkInvoice()">Unmark Invoice</button>
     <button class="btn btn-bulk" onclick="exportBillingSheet()">Export Billing</button>
     <button class="btn btn-bulk" onclick="exportPendingInvoiceSummary()">Pending Summary</button>
     <input id="f-search" placeholder="Container / client…" oninput="renderAllTable()" style="width:160px">
@@ -1813,6 +1839,8 @@ function renderPending(){
   document.getElementById('tab-pending').innerHTML=`<div class="filter-bar">
     <button class="btn btn-primary" onclick="bulkInvoiceSelected()">Assign Invoice to Selected</button>
     <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkPaid()">Unmark Paid</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkInvoice()">Unmark Invoice</button>
     <button class="btn btn-bulk" onclick="exportBillingSheet()">Export Billing Excel</button>
     <select id="f-pend-cl" onchange="renderPendingFiltered()"><option value="">All clients</option>${clientOpts}</select>
   </div><div id="pending-table"></div>`;
@@ -1831,6 +1859,8 @@ function renderPendingFiltered(){
 function renderInvoiced(){
   document.getElementById('tab-invoiced').innerHTML=`<div class="filter-bar">
     <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkPaid()">Unmark Paid</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkInvoice()">Unmark Invoice</button>
     <select id="f-paid" onchange="renderInvoicedTable()"><option value="">All</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option></select>
   </div><div id="invoiced-table"></div>`;
   renderInvoicedTable();
@@ -1850,6 +1880,7 @@ function renderPayments(){
   const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   document.getElementById('tab-payments').innerHTML=`<div class="filter-bar">
     <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkPaid()">Unmark Paid</button>
     <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()">Export Excel</button>
     <select id="f-pay-status" onchange="renderPaymentsTable()"><option value="">All</option><option value="unpaid">Unpaid</option><option value="paid">Paid</option></select>
     <select id="f-pay-cl" onchange="renderPaymentsTable()"><option value="">All clients</option>${clientOpts}</select>
@@ -1891,6 +1922,7 @@ function renderUnpaid(){
   const clientOpts=CLIENTS.filter(c=>!c.deleted).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');
   document.getElementById('tab-unpaid').innerHTML=`<div class="filter-bar">
     <button class="btn btn-primary mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button>
+    <button class="btn btn-bulk" onclick="bulkUnmarkPaid()">Unmark Paid</button>
     <button class="btn btn-bulk" onclick="exportPendingPaymentExcel()">Export Excel</button>
     <select id="f-unpaid-cl" onchange="renderUnpaidTable()"><option value="">All clients</option>${clientOpts}</select>
   </div><div id="unpaid-table"></div>`;
@@ -2023,7 +2055,7 @@ function renderClientDetail(cid,tab){
     const sorted=[...invoicedRows].sort((a,b)=>(b.invoiceNo||'').localeCompare(a.invoiceNo||''));
     const total=sorted.reduce((s,e)=>s+calcTotal(e).total,0);
     const tfoot=sorted.length?`<tfoot><tr class="tfoot-row"><td colspan="7">Total invoiced</td><td>RO ${total.toFixed(2)}</td><td></td></tr></tfoot>`:'';
-    bodyHtml=`<div style="margin-bottom:.75rem"><button class="btn btn-primary btn-sm mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot,sorted.map(e=>e.id)):'<div class="empty">No invoiced containers.</div>');
+    bodyHtml=`<div style="margin-bottom:.75rem;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary btn-sm mark-paid-count-btn" onclick="bulkMarkPaid()">Mark Paid (${selectedInvoices.size})</button><button class="btn btn-bulk btn-sm" onclick="bulkUnmarkPaid()">Unmark Paid</button><button class="btn btn-bulk btn-sm" onclick="bulkUnmarkInvoice()">Unmark Invoice</button></div>`+(sorted.length?tableWrap(sorted.map(e=>entryRow(e)).join(''),tfoot,sorted.map(e=>e.id)):'<div class="empty">No invoiced containers.</div>');
   }else if(tab==='ppay'){
     const groupArr=Object.entries(unpaidInvGroups).map(([inv,entries])=>({inv,entries,total:entries.reduce((s,e)=>s+calcTotal(e).total,0)})).sort((a,b)=>String(b.inv).localeCompare(String(a.inv)));
     const grandTotal=groupArr.reduce((s,g)=>s+g.total,0);
