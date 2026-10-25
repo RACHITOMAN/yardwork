@@ -1491,31 +1491,116 @@ function ensureXLSX(){
     document.head.appendChild(s);
   });
 }
+function ensureExcelJS(){
+  return new Promise((resolve,reject)=>{
+    if(window.ExcelJS){resolve();return}
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+    s.onload=resolve;s.onerror=()=>reject(new Error('Failed to load ExcelJS library.'));
+    document.head.appendChild(s);
+  });
+}
 
 async function exportBillingSheet(cid){
-  try{await ensureXLSX()}catch(e){alert(e.message);return}
+  try{await ensureExcelJS()}catch(e){alert(e.message);return}
   const cidToUse=cid||globalClientFilter;
-  let data=DB.filter(e=>!e.deleted&&!e.invoiced&&(e.loaded||e.op==='cross'));
-  if(cidToUse)data=data.filter(e=>e.clientId===cidToUse);
-  if(!data.length){alert('No ready-to-invoice containers.');return}
+  let entries=DB.filter(e=>!e.deleted&&!e.invoiced&&(e.loaded||e.op==='cross'));
+  if(cidToUse)entries=entries.filter(e=>e.clientId===cidToUse);
+  if(!entries.length){alert('No ready-to-invoice containers.');return}
   const label=cidToUse?clientName(cidToUse):'All Clients';
-  let tS=0,tOp=0,tTotal=0;
-  const rows=data.map(e=>{
-    const r=calcTotal(e);tS+=r.storageCost;tOp+=r.opCost;tTotal+=r.total;
-    // Build combined remarks: start with stored remarks, prepend Cross Load if applicable
+
+  // Build row data
+  const rows=entries.map(e=>{
+    const r=calcTotal(e);
     const parts=[];
     if(e.op==='cross')parts.push('Cross Load');
-    if(e.remarks&&!parts.includes(e.remarks)){
-      // remarks may already contain Cross Load — avoid duplicating
+    if(e.remarks){
       const rem=e.remarks.replace(/^Cross Load\s*\|\s*/i,'').replace(/\s*\|\s*Cross Load$/i,'').trim();
       if(rem)parts.push(rem);
     }
-    return{'Container No':e.containerNo,'Client':clientName(e.clientId),'Gate In':fmtXl(e.unloadDate),'Gate Out':fmtXl(e.loadDate),'Days':r.days,'Storage (RO)':+r.storageCost.toFixed(3),'Op Charge (RO)':+r.opCost.toFixed(3),'Total (RO)':+r.total.toFixed(3),'Remarks':parts.join(' | ')};
+    return{container:e.containerNo,client:clientName(e.clientId),gin:e.unloadDate,gout:e.loadDate,days:r.days,storage:r.storageCost,op:r.opCost,total:r.total,remarks:parts.join(' | ')};
   });
-  rows.push({});rows.push({'Container No':'TOTAL','Storage (RO)':+tS.toFixed(3),'Op Charge (RO)':+tOp.toFixed(3),'Total (RO)':+tTotal.toFixed(3)});
-  const ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=[{wch:18},{wch:25},{wch:14},{wch:14},{wch:8},{wch:16},{wch:16},{wch:14},{wch:20}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Billing');
-  XLSX.writeFile(wb,`${label}_Billing_${today()}.xlsx`);
+  // group repeat visits of same container together
+  const order=[];const seen=new Map();
+  rows.forEach(r=>{if(!seen.has(r.container)){seen.set(r.container,[]);order.push(r.container)}seen.get(r.container).push(r)});
+  const ordered=order.flatMap(cn=>seen.get(cn).slice().sort((a,b)=>(a.gin||'').localeCompare(b.gin||'')));
+
+  const parseD=s=>{if(!s)return null;const[y,m,d]=s.split('-').map(Number);return new Date(Date.UTC(y,m-1,d))};
+  const clientNames=[...new Set(ordered.map(r=>r.client))];
+  const gins=ordered.map(r=>parseD(r.gin)).filter(Boolean).sort((a,b)=>a-b);
+  const gouts=ordered.map(r=>parseD(r.gout)).filter(Boolean).sort((a,b)=>a-b);
+  const MONN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtD=d=>d?`${String(d.getUTCDate()).padStart(2,'0')} ${MONN[d.getUTCMonth()]} ${d.getUTCFullYear()}`:'';
+  const storageRate=STORAGE_RATE||3;
+
+  const wb=new ExcelJS.Workbook();
+  wb.creator='Yard Tracker';
+  const H=5;// header row number
+  const ws=wb.addWorksheet('Billing',{views:[{state:'frozen',ySplit:H}]});
+  ws.columns=[{width:16},{width:30},{width:14},{width:14},{width:8},{width:14},{width:16},{width:13},{width:28}];
+
+  // Row 1: title
+  ws.mergeCells('A1:I1');
+  const t=ws.getCell('A1');t.value='Yard Billing Statement';t.font={bold:true,size:15,color:{argb:'FF1F3A5F'}};
+
+  // Row 2: client
+  ws.getCell('A2').value='Client';ws.getCell('A2').font={color:{argb:'FF667483'}};
+  ws.getCell('C2').value=clientNames.join(', ');ws.getCell('C2').font={bold:true};
+
+  // Row 3: period
+  ws.getCell('A3').value='Period';ws.getCell('A3').font={color:{argb:'FF667483'}};
+  ws.getCell('C3').value=gins.length?`${fmtD(gins[0])} to ${fmtD(gouts.length?gouts[gouts.length-1]:gins[gins.length-1])}`:'';
+
+  // Row 5: column headers (row 4 blank spacer)
+  const thin={style:'thin',color:{argb:'FF7F8C99'}},box={top:thin,left:thin,bottom:thin,right:thin};
+  ['Container No','Client','Gate In','Gate Out','Days','Storage (RO)','Op Charge (RO)','Total (RO)','Remarks'].forEach((t,i)=>{
+    const c=ws.getRow(H).getCell(i+1);c.value=t;c.font={bold:true,color:{argb:'FFFFFFFF'}};
+    c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1F3A5F'}};c.border=box;
+    c.alignment={horizontal:'center',vertical:'middle'};
+  });
+  ws.getRow(H).height=22;
+
+  // Data rows
+  const DATE='dd mmm yyyy',MONEY='#,##0.000';
+  ordered.forEach((r,i)=>{
+    const n=i+H+1,row=ws.getRow(n);
+    row.getCell(1).value=r.container;
+    row.getCell(2).value=r.client;
+    const gd=parseD(r.gin);row.getCell(3).value=gd;row.getCell(3).numFmt=DATE;
+    const god=parseD(r.gout);row.getCell(4).value=god;row.getCell(4).numFmt=DATE;
+    row.getCell(5).value=r.days;
+    row.getCell(6).value={formula:`E${n}*${storageRate}`,result:r.storage};row.getCell(6).numFmt=MONEY;
+    row.getCell(7).value=r.op;row.getCell(7).numFmt=MONEY;
+    row.getCell(8).value={formula:`F${n}+G${n}`,result:r.total};row.getCell(8).numFmt=MONEY;
+    row.getCell(9).value=r.remarks||null;
+    for(let k=1;k<=9;k++){
+      const cell=row.getCell(k);cell.border=box;cell.alignment={horizontal:'center',vertical:'middle'};
+      if(i%2)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEAF0F7'}};
+    }
+  });
+
+  // TOTAL row
+  const last=ordered.length+H;
+  const tRow=ws.getRow(last+1);
+  tRow.getCell(1).value='TOTAL';
+  tRow.getCell(6).value={formula:`SUM(F${H+1}:F${last})`,result:ordered.reduce((a,r)=>a+r.storage,0)};tRow.getCell(6).numFmt=MONEY;
+  tRow.getCell(7).value={formula:`SUM(G${H+1}:G${last})`,result:ordered.reduce((a,r)=>a+r.op,0)};tRow.getCell(7).numFmt=MONEY;
+  tRow.getCell(8).value={formula:`SUM(H${H+1}:H${last})`,result:ordered.reduce((a,r)=>a+r.total,0)};tRow.getCell(8).numFmt=MONEY;
+  for(let k=1;k<=9;k++){
+    const cell=tRow.getCell(k);cell.font={bold:true};
+    cell.border={top:{style:'medium'},bottom:{style:'double'},left:thin,right:thin};
+    cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD5E0EE'}};
+    cell.alignment={horizontal:'center',vertical:'middle'};
+  }
+
+  // Page setup: landscape, fit to one page
+  ws.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:1,paperSize:9,margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2}};
+
+  const buf=await wb.xlsx.writeBuffer();
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=`${label}_Billing_${today()}.xlsx`;
+  a.click();
 }
 
 async function exportPendingInvoiceSummary(){
