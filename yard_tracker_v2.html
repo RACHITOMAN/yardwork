@@ -1199,14 +1199,17 @@ function processImportRows(rawRows){
         const idx=existingActive.findIndex(e=>e.id===existing.id);
         if(idx>=0)existingActive.splice(idx,1);
       }else{
-        // Not in DB yard — came from a split (UNLOADING+LOADING same Excel).
-        // Import as a new completed trip: gate-in = gate-out date (same day turnaround).
-        const fp2=cnum+'|'+(outDate||'');
-        if(dbFingerprints.has(fp2)){
-          actions.push({action:'skip',reason:'duplicate — already imported (same container + date)',cnum:rawCnum,clientName:cName});
+        // Standalone gate-out but container NOT in yard — likely a typo.
+        // Check for a fuzzy match before deciding what to do.
+        const prefix2=cnum.slice(0,4);
+        const digits2=cnum.slice(4);
+        const near2=existingActive.find(e=>{const nc=normCnum(e.containerNo);return nc.slice(0,4)===prefix2&&nc!==cnum&&editDist(nc.slice(4),digits2)<=2;});
+        if(near2){
+          // Fuzzy match found — show as mismatch so user can choose which container to gate-out
+          actions.push({action:'mismatch',xlCnum:rawCnum,normXl:cnum,dbCnum:near2.containerNo,dbId:near2.id,isGateOut:true,loadDate:outDate,date:outDate,clientId,clientName:cName,salesRef,loaded:true,remarks:outRemarks||''});
         }else{
-          actions.push({action:'new',cnum,rawCnum,date:outDate,clientId,clientName:cName,salesRef,loadDate:outDate,loaded:true,op:'unload',remarks:outRemarks||''});
-          dbFingerprints.add(fp2);
+          // No match at all — skip with a clear explanation; never create a ghost entry
+          actions.push({action:'skip',reason:`LOADING recorded but "${rawCnum}" is not in the yard — possible typo or missing gate-in`,cnum:rawCnum,clientName:cName});
         }
       }
     }
@@ -1227,7 +1230,8 @@ function processImportRows(rawRows){
   // Store result and show preview
   importParsedRows=actions;
   // preserve existing mismatch choices, only init new ones
-  actions.filter(a=>a.action==='mismatch'&&!(a.normXl in importMismatchMap)).forEach(a=>importMismatchMap[a.normXl]='new');
+  // gate-out mismatches default to 'usedb' (skip=don't create ghost); gate-in default to 'new'
+  actions.filter(a=>a.action==='mismatch'&&!(a.normXl in importMismatchMap)).forEach(a=>importMismatchMap[a.normXl]=a.isGateOut?'usedb':'new');
   renderImportPreview(actions,dataRows.filter(r=>r&&!r.every(v=>v===null||v==='')).length);
 }
 
@@ -1255,13 +1259,14 @@ function renderImportPreview(actions,excelRowCount){
     mmsec.style.display='';
     let html='<table style="width:100%;font-size:12px"><thead><tr><th>Excel container</th><th>Similar in DB</th><th>Resolution</th></tr></thead><tbody>';
     mismatchRows.forEach(a=>{
+      const defVal=importMismatchMap[a.normXl]||(a.isGateOut?'usedb':'new');
+      const opts=a.isGateOut
+        ?`<option value="usedb"${defVal==='usedb'?' selected':''}>Gate out ${esc(a.dbCnum)} (fix typo)</option><option value="skip"${defVal==='skip'?' selected':''}>Skip — do not gate out</option>`
+        :`<option value="new"${defVal==='new'?' selected':''}>Import as new container</option><option value="usedb"${defVal==='usedb'?' selected':''}>Use DB number (${esc(a.dbCnum)})</option>`;
       html+=`<tr class="import-row-mismatch">
-        <td><strong>${esc(a.xlCnum)}</strong></td>
+        <td><strong>${esc(a.xlCnum)}</strong>${a.isGateOut?'<br><span style="font-size:11px;color:#b45309">LOADING — not in yard</span>':''}</td>
         <td>${esc(a.dbCnum)}</td>
-        <td><select onchange="importMismatchMap['${esc(a.normXl)}']=this.value" style="font-size:12px;padding:3px;border:0.5px solid var(--border2);border-radius:4px;background:var(--bg);color:var(--text)">
-          <option value="new">Import as new container</option>
-          <option value="usedb">Use DB number (${esc(a.dbCnum)})</option>
-        </select></td>
+        <td><select onchange="importMismatchMap['${esc(a.normXl)}']=this.value" style="font-size:12px;padding:3px;border:0.5px solid var(--border2);border-radius:4px;background:var(--bg);color:var(--text)">${opts}</select></td>
       </tr>`;
     });
     html+='</tbody></table>';
@@ -1293,8 +1298,8 @@ function renderImportPreview(actions,excelRowCount){
     }else if(a.action==='mismatch'){
       actionLabel='<span class="badge badge-cross">Review</span>';
       rowClass='import-row-mismatch';
-      typeLabel='Unloading';
-      note=`Similar to: ${esc(a.dbCnum)}`+(a.clientId?'':` &nbsp;<button class="btn btn-sm btn-client" data-cname="${esc(a.clientName)}" onclick="importAddClient(this.dataset.cname)">+ Add Client</button>`);
+      typeLabel=a.isGateOut?'Gate out (typo?)':'Unloading (typo?)';
+      note=`Possible typo — similar to: <strong>${esc(a.dbCnum)}</strong>`+(a.clientId?'':` &nbsp;<button class="btn btn-sm btn-client" data-cname="${esc(a.clientName)}" onclick="importAddClient(this.dataset.cname)">+ Add Client</button>`);
     }
     // Remarks cell: show value + EMPTY warning inline
     if(a.remarks){remarksHtml=`<span style="color:var(--text2)">${esc(a.remarks)}</span>`;}
@@ -1406,8 +1411,11 @@ async function commitImportConfirmed(){
     }
 
     else if(a.action==='mismatch'){
-      const resolution=importMismatchMap[a.normXl]||'new';
-      if(resolution==='usedb'){
+      const resolution=importMismatchMap[a.normXl]||(a.isGateOut?'usedb':'new');
+      if(resolution==='skip'){
+        // user chose to skip this gate-out mismatch — do nothing
+        continue;
+      }else if(resolution==='usedb'){
         // treat as gate-out update for existing DB record
         const existing=DB.find(e=>!e.deleted&&e.op==='unload'&&!e.loaded&&normCnum(e.containerNo)===normCnum(a.dbCnum));
         if(existing){
