@@ -997,17 +997,42 @@ function processImportRows(rawRows){
   // two separate DB records. We process rows in sequence and pair each gate-in with
   // the next gate-out for that container (if any), then start fresh for the next gate-in.
 
-  // Auto-detect column layout by inspecting first data row:
-  // OLD format: [SL, Date, Container, TypeOfWork, Client, SalesRef, ...]  → indices 1,2,3,4,5
-  // NEW format: [Date, Container, Operation, Client, Operator, JobNo, ...]→ indices 0,1,2,3,5
-  let colDate=1,colCnum=2,colOp=3,colClient=4,colRef=5;
+  // Auto-detect column layout from the header row (if present) or first data row.
+  // OLD format: [SL NO, Date, Container, TypeOfWork, Client, REFF/CO, JOB NO, NAME, ...]
+  // NEW format: [Date, Container, Operation, Client, JobRef, Operator, ...]
+  //             [Date, Container, Operation, Client, Operator, ...]  (no ref)
+  let colDate=1,colCnum=2,colOp=3,colClient=4,colRef=-1,colRemarks=-1;
+
+  // First try to find columns by header label (look at the original rawRows header row)
+  if(rawRows.length){
+    const hdr=rawRows[0];
+    hdr.forEach((cell,i)=>{
+      const h=String(cell||'').toUpperCase().trim();
+      if(h==='DATE'||h==='DATE ')colDate=i;
+      if(h.includes('CONTAINER'))colCnum=i;
+      if(h.includes('TYPE')||h.includes('OPERATION')||h==='TYPE OF WORK')colOp=i;
+      if(h.includes('CLIENT'))colClient=i;
+      if(h.includes('REFF')||h.includes('REF')||h.includes('JOB')||h==='REFF/CO'||h==='JOB NO.')colRef=i;
+      if(h.includes('REMARK')||h.includes('COMMENT')||h.includes('NOTE'))colRemarks=i;
+    });
+  }
+
+  // Fallback: auto-detect from first data row shape if header labels didn't set it
   if(dataRows.length){
     const fr=dataRows[0];
     const c0=String(fr[0]||'').trim();
     const c1=String(fr[1]||'').trim();
     const looksDate=/^\d{1,2}[.\-\/]\d{1,2}[.\-\/]\d{2,4}$/.test(c0)||(!isNaN(Number(c0))&&Number(c0)>40000&&Number(c0)<100000);
     const looksContainer=/^[A-Z]{4}\d{7}$/.test(c1.replace(/\s/g,'').toUpperCase());
-    if(looksDate||looksContainer){colDate=0;colCnum=1;colOp=2;colClient=3;colRef=5;}
+    if(looksDate||looksContainer){
+      // New format: Date=0, Container=1, Op=2, Client=3
+      colDate=0;colCnum=1;colOp=2;colClient=3;
+      // Col 4 (E) is always remarks/job-ref in new format
+      if(colRef<0)colRef=4;
+    }else{
+      // Old format: SL=0, Date=1, Container=2, Op=3, Client=4, Ref=5, JobNo=6, Name=7
+      if(colRef<0)colRef=5;
+    }
   }
 
   // Build an ordered list of move events from the Excel rows
@@ -1021,18 +1046,18 @@ function processImportRows(rawRows){
     const date=parseExcelDate(row[colDate]);
     const typeOfWork=String(row[colOp]||'');
     const clientNameVal=String(row[colClient]||'').trim();
-    const salesRef=String(row[colRef]||'').trim();
+    const salesRef=colRef>=0?String(row[colRef]||'').trim():'';
+    const extraRemarks=colRemarks>=0?String(row[colRemarks]||'').trim():'';
     const mapped=mapOpType(typeOfWork);
     if(!mapped){
-      // Unknown operation type — show as skipped with reason so user can see it
-      // We push directly to a separate unknownRows list and convert to skip actions after
-      moveEvents.push({type:'unknown',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:false,remarks:'',reason:'Unknown op: '+typeOfWork.trim()});
+      moveEvents.push({type:'unknown',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:false,remarks:extraRemarks,reason:'Unknown op: '+typeOfWork.trim()});
       continue;
     }
-    // Build remarks: prepend EMPTY if applicable, then append column F value
+    // Build remarks: EMPTY flag first, then job ref, then any explicit remarks column
     const remarksParts=[];
     if(mapped.isEmpty)remarksParts.push('EMPTY');
     if(salesRef)remarksParts.push(salesRef);
+    if(extraRemarks&&extraRemarks!==salesRef)remarksParts.push(extraRemarks);
     const remarks=remarksParts.join(' | ');
     if(mapped.op==='cross'){
       moveEvents.push({type:'cross',cnum,rawCnum,date,clientName:clientNameVal,salesRef,isEmpty:mapped.isEmpty,remarks});
