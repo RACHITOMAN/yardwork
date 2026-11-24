@@ -152,6 +152,7 @@ body.client-portal .global-client-filter{display:none!important}
     <button class="btn btn-client" onclick="openClientModal(null)">+ Add Client</button>
     <button class="btn btn-primary" onclick="openAddModal()">+ New Entry</button>
     <button class="btn btn-bulk" onclick="openBulkModal()">⊞ Bulk Entry</button>
+    <button class="btn" style="background:#0369a1;color:#fff;border:none" onclick="backupCSV()" title="Download a full CSV backup of all data">💾 Backup</button>
     <button class="btn" style="background:#7c3aed;color:#fff;border:none" onclick="openImportModal()">↑ Import Excel</button>
     <button id="undo-import-btn" class="btn" style="display:none;background:#b45309;color:#fff;border:none" onclick="undoLastImport()">↩ Undo Import</button>
     <span id="active-user-label" style="font-size:12px;font-weight:600;color:var(--text2);padding:0 4px"></span>
@@ -1094,13 +1095,20 @@ function processImportRows(rawRows){
       pendingIn[ev.cnum]={date:ev.date,rawCnum:ev.rawCnum,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,remarks:ev.remarks};
     }else if(ev.type==='out'){
       if(pendingIn[ev.cnum]){
-        // Container appears as UNLOADING then LOADING in same Excel.
-        // Always treat as 2 separate entries:
-        //   gate-out trip → standalone (updates existing DB record, or new completed if none)
-        //   gate-in (pendingIn) → stays open, becomes a new entry
         const p=pendingIn[ev.cnum];
-        trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
-        // Keep pendingIn open — will flush as new gate-in entry at end
+        if(existingYardNorms.has(ev.cnum)){
+          // Container is ALREADY in the DB yard AND appears as UNLOADING→LOADING in same Excel.
+          // Treat as 2 separate entries:
+          //   gate-out trip → standalone (updates the existing DB record)
+          //   gate-in (pendingIn) → stays open, becomes a new entry
+          trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
+          // Keep pendingIn open — will flush as new gate-in entry at end
+        }else{
+          // Container is NOT in the DB yard — the UNLOADING and LOADING are a fresh in→out pair.
+          // Pair them as a single completed trip.
+          delete pendingIn[ev.cnum];
+          trips.push({cnum:ev.cnum,rawCnum:p.rawCnum,inDate:p.date,outDate:ev.date,clientName:p.clientName||ev.clientName,salesRef:p.salesRef||ev.salesRef,isEmpty:p.isEmpty,inRemarks:p.remarks,outRemarks:ev.remarks});
+        }
       }else{
         // Gate-out with no gate-in in this Excel → standalone gate-out (update DB)
         trips.push({cnum:ev.cnum,rawCnum:ev.rawCnum,inDate:null,outDate:ev.date,clientName:ev.clientName,salesRef:ev.salesRef,isEmpty:ev.isEmpty,inRemarks:null,outRemarks:ev.remarks});
@@ -1270,8 +1278,10 @@ function renderImportPreview(actions,excelRowCount){
   // Summary pills — show Excel row count vs actions breakdown
   const totalImporting=newRows.length+updateRows.length+mismatchRows.length;
   const grandTotal=newRows.length+updateRows.length+mismatchRows.length+skipRows.length;
+  // Count distinct container numbers across all actions (paired in+out = 1 container)
+  const uniqueContainers=new Set(actions.map(a=>a.cnum||a.xlCnum||'').filter(Boolean)).size;
   document.getElementById('import-summary').innerHTML=
-    `<span class="import-pill" style="background:var(--bg3);color:var(--text);font-weight:700">Total: ${grandTotal}</span>`+
+    `<span class="import-pill" style="background:var(--bg3);color:var(--text);font-weight:700">📄 ${excelRowCount} Excel rows → ${uniqueContainers} container(s)</span>`+
     `<span class="import-pill import-pill-new">✚ ${newRows.length} new</span>`+
     `<span class="import-pill import-pill-update">↑ ${updateRows.length} updates</span>`+
     `<span class="import-pill import-pill-skip">— ${skipRows.length} skipped</span>`+
@@ -1476,8 +1486,59 @@ async function commitImportConfirmed(){
 
   importParsedRows=[];importMismatchMap={};
   closeModal('modal-import');setSyncStatus('saved');render();
-  alert(`Import complete!\nTotal: ${inserted+updated}\n✚ Inserted: ${inserted}\n↑ Updated: ${updated}${errors?`\n⚠ Errors: ${errors}`:''}`);
+  // Show import-complete banner with backup prompt
+  showImportCompleteBanner(inserted,updated,errors);
 }
+function showImportCompleteBanner(inserted,updated,errors){
+  // Remove any existing banner
+  const old=document.getElementById('import-complete-banner');
+  if(old)old.remove();
+  const banner=document.createElement('div');
+  banner.id='import-complete-banner';
+  banner.style.cssText='position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:9999;background:#fff;color:#111;border:1.5px solid #16a34a;border-radius:10px;padding:16px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.18);min-width:320px;max-width:480px;text-align:center';
+  const summary=`✅ Import complete — ${inserted+updated} record(s) processed`
+    +(inserted?`\n✚ ${inserted} new`:'')
+    +(updated?`   ↑ ${updated} updated`:'')
+    +(errors?`   ⚠ ${errors} error(s)`:'');
+  banner.innerHTML=`
+    <div style="font-weight:700;font-size:15px;margin-bottom:6px">✅ Import Complete</div>
+    <div style="font-size:13px;color:#374151;margin-bottom:12px">
+      ${inserted?`<span style="color:#16a34a;font-weight:600">✚ ${inserted} new</span>&nbsp;&nbsp;`:''}
+      ${updated?`<span style="color:#2563eb;font-weight:600">↑ ${updated} updated</span>&nbsp;&nbsp;`:''}
+      ${errors?`<span style="color:#dc2626;font-weight:600">⚠ ${errors} error(s)</span>`:''}
+    </div>
+    <div style="font-size:12px;color:#6b7280;margin-bottom:12px">💡 Recommended: download a backup after each import</div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button onclick="backupCSV();document.getElementById('import-complete-banner').remove()"
+        style="background:#0369a1;color:#fff;border:none;padding:8px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">💾 Download Backup</button>
+      <button onclick="document.getElementById('import-complete-banner').remove()"
+        style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;padding:8px 18px;border-radius:6px;font-size:13px;cursor:pointer">Dismiss</button>
+    </div>`;
+  document.body.appendChild(banner);
+  // Auto-dismiss after 30 seconds if not interacted with
+  setTimeout(()=>{const b=document.getElementById('import-complete-banner');if(b)b.remove();},30000);
+}
+
+function backupCSV(){
+  if(!DB||!DB.length){alert('No data to back up.');return}
+  const clientName=id=>{ const c=CLIENTS.find(x=>x.id===id); return c?c.name:''; };
+  const headers=['ID','Container No','Op','Unload Date','Loaded','Load Date','Client','Sales Ref','Remarks','Invoice No','Invoiced','Paid Date','Deleted','Created By'];
+  const rows=DB.map(e=>[
+    e.id,e.containerNo,e.op,e.unloadDate||'',e.loaded?'Y':'N',e.loadDate||'',
+    clientName(e.clientId),e.salesRef||'',e.remarks||'',e.invoiceNo||'',
+    e.invoiced?'Y':'N',e.paidDate||'',e.deleted?'Y':'N',e.createdBy||''
+  ]);
+  const escape=v=>{ const s=String(v==null?'':v); return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s; };
+  const csv=[headers,...rows].map(r=>r.map(escape).join(',')).join('\r\n');
+  const today=new Date().toISOString().slice(0,10);
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`yard_backup_${today}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 function updateUndoImportBtn(){
   const btn=document.getElementById('undo-import-btn');
   if(!btn)return;
